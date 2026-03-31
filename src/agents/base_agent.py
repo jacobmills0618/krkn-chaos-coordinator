@@ -7,6 +7,7 @@ from src.apis.jira_client import JiraClient
 from src.apis.sippy_client import SippyClient
 from src.apis.github_client import GitHubClient
 from src.filter.chaos_filter import filter_bugs
+from src.filter.llm_filter import llm_filter_bugs
 from src.knowledge.chromadb_store import ChromaStore
 from src.knowledge.component_map import get_components_for_agent
 from src.knowledge.memory import MemoryStore
@@ -42,6 +43,7 @@ class BaseDomainAgent(ABC):
         scenarios: list[ScenarioInfo],
         release: str,
         memory: MemoryStore | None = None,
+        use_llm_filter: bool = False,
     ):
         self.agent_name = agent_name
         self.jira = jira
@@ -51,6 +53,7 @@ class BaseDomainAgent(ABC):
         self.scenarios = scenarios
         self.release = release
         self.memory = memory or MemoryStore()
+        self.use_llm_filter = use_llm_filter
         self.components = get_components_for_agent(agent_name)
 
     def run(self) -> AgentResult:
@@ -99,6 +102,9 @@ class BaseDomainAgent(ABC):
 
     def _filter(self, bugs: list[Bug]) -> tuple[list[FilterResult], list[FilterResult]]:
         """FILTER: Determine chaos relevance of each bug."""
+        if self.use_llm_filter:
+            logger.info("Using LLM-enhanced filter (Ollama)")
+            return llm_filter_bugs(bugs)
         return filter_bugs(bugs)
 
     def _map(self, relevant: list[FilterResult]) -> tuple[list[ScenarioMatch], list[ScenarioMatch]]:
