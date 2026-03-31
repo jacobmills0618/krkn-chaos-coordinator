@@ -400,6 +400,172 @@ def ingest_krkn_lib_docs(github: GitHubClient, chroma: ChromaStore) -> int:
     return len(chunks)
 
 
+OCP_SKIP_KEYWORDS = [
+    "rosa-", "osd-", "microshift", "windows-node", "windows-container",
+    "azure-stack", "alibaba", "ibm-power", "ibm-z-",
+    "s2i-", "source-to-image", "jenkins", "gitops", "argo", "tekton", "pipeline",
+    "serverless", "knative", "service-mesh", "istio", "kiali",
+    "adding-tab", "customizing-web-console",
+    "compliance-", "file-integrity",
+    "virt-", "virtual-machine-", "vm-dsk", "vm-console",
+    "metering-", "cost-",
+    "mirror-", "mirroring-", "disconnected-",
+    "installing-", "install-config-", "upi-", "ipi-",
+    "bare-metal-ipi", "nutanix-", "vsphere-install", "aws-install",
+    "build-strategy", "buildconfig", "image-stream",
+    "gpu-", "fpga-", "dpdk-", "rdma-",
+    "ztp-", "sandboxed-", "migration-",
+    "cnf-image-based-upgrade",
+    "accepting-", "cloud-experts-", "abi-",
+    "accessing-windows",
+    "about-redhat-openshift-gitops", "about-ztp", "about-jobset",
+    "about-insights-advisor", "about-oadp",
+]
+
+OCP_TOPIC_DIRS = [
+    "architecture", "etcd", "networking", "nodes", "storage",
+    "operators", "updating", "upgrading", "authentication",
+    "observability", "backup_and_restore", "machine_configuration",
+    "machine_management", "scalability_and_performance",
+    "security", "registry", "post_installation_configuration",
+]
+
+
+def _clean_asciidoc(text: str) -> str:
+    """Strip AsciiDoc formatting to plain text."""
+    # Remove AsciiDoc attributes
+    text = re.sub(r"^:.*?:\s*.*$", "", text, flags=re.MULTILINE)
+    # Remove comments
+    text = re.sub(r"^//.*$", "", text, flags=re.MULTILINE)
+    # Remove includes
+    text = re.sub(r"^include::.*$", "", text, flags=re.MULTILINE)
+    # Remove block delimiters
+    text = re.sub(r"^[=\-\.]{4,}$", "", text, flags=re.MULTILINE)
+    # Remove image references
+    text = re.sub(r"image::.*?\[.*?\]", "", text)
+    # Remove anchor IDs
+    text = re.sub(r"\[id=[\"'].*?[\"']\]", "", text)
+    # Simplify section headers
+    text = re.sub(r"^=+\s+", "# ", text, flags=re.MULTILINE)
+    # Remove admonition blocks (NOTE, TIP, WARNING, etc.)
+    text = re.sub(r"^\[(?:NOTE|TIP|WARNING|IMPORTANT|CAUTION)\]\n====\n.*?\n====", "", text, flags=re.MULTILINE | re.DOTALL)
+    # Remove inline formatting
+    text = re.sub(r"\{product-title\}", "OpenShift", text)
+    text = re.sub(r"\{nbsp\}", " ", text)
+    # Collapse whitespace
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def ingest_ocp_modules(github: GitHubClient, chroma: ChromaStore) -> int:
+    """Ingest OpenShift docs modules from openshift/openshift-docs."""
+    owner, repo = "openshift", "openshift-docs"
+
+    # List all modules
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/modules"
+    try:
+        resp = github._session.get(url, timeout=30)
+        resp.raise_for_status()
+        all_files = resp.json()
+    except Exception as e:
+        logger.error("Failed to list OCP modules: %s", e)
+        return 0
+
+    adoc_files = [f for f in all_files if f["name"].endswith(".adoc")]
+
+    # Filter out irrelevant files
+    relevant = []
+    for f in adoc_files:
+        name_lower = f["name"].lower()
+        if not any(kw in name_lower for kw in OCP_SKIP_KEYWORDS):
+            relevant.append(f)
+
+    logger.info("OCP modules: %d total, %d relevant (skipped %d)",
+                len(adoc_files), len(relevant), len(adoc_files) - len(relevant))
+
+    chunks = []
+    for i, f in enumerate(relevant):
+        if i % 50 == 0:
+            logger.info("  Processing module %d/%d...", i, len(relevant))
+
+        content = github.get_file_content(owner, repo, f["path"])
+        if not content:
+            continue
+
+        cleaned = _clean_asciidoc(content)
+        if len(cleaned) < 30:
+            continue
+
+        component = _infer_component(f["name"], cleaned)
+        text = f"Source: OpenShift docs — {f['name']}\n\n{cleaned}"
+
+        for chunk in _chunk_text(text):
+            chunks.append(DocChunk(
+                text=chunk,
+                component=component,
+                doc_type="ocp-docs",
+                source="openshift/openshift-docs",
+                version="",
+            ))
+
+    chroma.add_ocp_docs(chunks)
+    logger.info("Ingested %d OCP module chunks", len(chunks))
+    return len(chunks)
+
+
+def ingest_ocp_topics(github: GitHubClient, chroma: ChromaStore) -> int:
+    """Ingest OCP topic assembly files (architecture, etcd, networking, etc.)."""
+    owner, repo = "openshift", "openshift-docs"
+
+    chunks = []
+    for topic_dir in OCP_TOPIC_DIRS:
+        files = _list_files_recursive(github, owner, repo, topic_dir, extensions=(".adoc",))
+        logger.info("  Topic %s: %d files", topic_dir, len(files))
+
+        for f in files:
+            content = github.get_file_content(owner, repo, f["path"])
+            if not content:
+                continue
+
+            cleaned = _clean_asciidoc(content)
+            if len(cleaned) < 30:
+                continue
+
+            component = _infer_component(f["path"], cleaned)
+            text = f"Source: OpenShift docs — {f['path']}\n\n{cleaned}"
+
+            for chunk in _chunk_text(text):
+                chunks.append(DocChunk(
+                    text=chunk,
+                    component=component,
+                    doc_type="ocp-docs",
+                    source="openshift/openshift-docs",
+                    version="",
+                ))
+
+    chroma.add_ocp_docs(chunks)
+    logger.info("Ingested %d OCP topic chunks", len(chunks))
+    return len(chunks)
+
+
+def ingest_krkn_claude_md(github: GitHubClient, chroma: ChromaStore) -> int:
+    """Ingest krkn CLAUDE.md (plugin creation guide)."""
+    content = github.get_file_content("krkn-chaos", "krkn", "CLAUDE.md")
+    if not content:
+        return 0
+
+    chunks = []
+    for chunk in _chunk_text(f"Source: krkn CLAUDE.md — Plugin creation guide\n\n{content}"):
+        chunks.append(DocChunk(
+            text=chunk, component="general",
+            doc_type="guide", source="krkn-chaos/krkn", version="",
+        ))
+
+    chroma.add_krkn_docs(chunks)
+    logger.info("Ingested %d CLAUDE.md chunks", len(chunks))
+    return len(chunks)
+
+
 def run_full_ingestion(github_token: str, chroma_dir: str = "./chroma_data") -> dict:
     """Run full ingestion pipeline — pull all docs from GitHub, ingest into ChromaDB."""
     github = GitHubClient(token=github_token)
@@ -408,11 +574,19 @@ def run_full_ingestion(github_token: str, chroma_dir: str = "./chroma_data") -> 
     logger.info("Starting full ingestion from GitHub...")
 
     results = {}
+
+    # krkn ecosystem
     results["scenario_yamls"] = ingest_scenario_yamls(github, chroma)
     results["website_docs"] = ingest_website_docs(github, chroma)
     results["krkn_hub_docs"] = ingest_krkn_hub_docs(github, chroma)
     results["plugin_code"] = ingest_plugin_code(github, chroma)
     results["krkn_lib_docs"] = ingest_krkn_lib_docs(github, chroma)
+    results["krkn_claude_md"] = ingest_krkn_claude_md(github, chroma)
+
+    # OpenShift docs
+    results["ocp_modules"] = ingest_ocp_modules(github, chroma)
+    results["ocp_topics"] = ingest_ocp_topics(github, chroma)
+
     results["total"] = sum(results.values())
 
     logger.info("Ingestion complete: %s", results)
