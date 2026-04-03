@@ -37,47 +37,82 @@ def _clean_markdown(text: str) -> str:
 
 
 def _infer_component(path: str, content: str) -> str:
-    """Infer the OCP component from file path and content."""
-    path_lower = path.lower()
-    content_lower = content[:500].lower()
+    """Infer the OCP component from file path and content.
 
-    component_map = {
-        "etcd": "etcd",
-        "node-scenario": "node",
-        "node_scenario": "node",
-        "node_action": "node",
-        "pod-scenario": "pod",
-        "pod_disruption": "pod",
-        "network-chaos": "network",
-        "network_chaos": "network",
-        "cpu-hog": "cpu_hog",
-        "memory-hog": "memory_hog",
-        "io-hog": "io_hog",
-        "pvc": "storage",
-        "zone-outage": "zone_outage",
-        "zone_outage": "zone_outage",
-        "application-outage": "application",
-        "application_outage": "application",
-        "service-disruption": "service",
-        "service_disruption": "service",
-        "service-hijacking": "service",
-        "service_hijacking": "service",
-        "container": "container",
-        "time-scenario": "time",
-        "time_action": "time",
-        "power-outage": "power",
-        "shut_down": "power",
-        "syn-flood": "syn_flood",
-        "syn_flood": "syn_flood",
-        "http-load": "http_load",
-        "http_load": "http_load",
-        "kubevirt": "kubevirt",
-        "managed-cluster": "managed_cluster",
-    }
+    Maps to agent domain names to enable filtered searches like:
+    chroma.search(query, component="networking")
+    """
+    text = f"{path} {content[:800]}".lower()
 
-    for keyword, component in component_map.items():
-        if keyword in path_lower or keyword in content_lower:
-            return component
+    # Ordered from most specific to least specific
+    rules: list[tuple[str, list[str]]] = [
+        # Control plane
+        ("etcd", ["etcd", "raft", "quorum"]),
+        ("kube-apiserver", ["kube-apiserver", "apiserver", "api server", "api-server"]),
+        ("kube-scheduler", ["kube-scheduler", "scheduler"]),
+        ("kube-controller-manager", ["kube-controller-manager", "controller-manager"]),
+        ("hypershift", ["hypershift", "hosted control plane", "hosted-control-plane"]),
+        ("oauth", ["oauth", "openid", "oidc", "authentication"]),
+
+        # Networking
+        ("ovn-kubernetes", ["ovn-kubernetes", "ovn", "ovnkubernetes"]),
+        ("dns", ["coredns", "dns-operator", "cluster-dns"]),
+        ("ingress", ["ingress", "router", "haproxy", "route"]),
+        ("ptp", ["/ptp", "precision time", "linuxptp"]),
+        ("sriov", ["sr-iov", "sriov", "single root"]),
+        ("multus", ["multus"]),
+        ("metallb", ["metallb", "metal lb", "metal-lb"]),
+        ("network-policy", ["network policy", "network_policy", "networkpolicy"]),
+        ("sdn", ["openshift-sdn", "sdn"]),
+
+        # Node / Machine
+        ("kubelet", ["kubelet"]),
+        ("crio", ["cri-o", "crio"]),
+        ("machine-api", ["machine api", "machine-api", "machineapi"]),
+        ("mco", ["machine config", "machineconfig", "mco"]),
+        ("baremetal", ["baremetal", "bare metal", "ironic", "ipmi", "bmc", "redfish"]),
+        ("node-tuning", ["node tuning", "tuned", "performance profile", "numa", "hugepage"]),
+        ("autoscaler", ["autoscaler", "cluster-autoscaler", "machine-autoscaler"]),
+
+        # Storage
+        ("csi", ["csi driver", "csi-driver", "volume", "persistent volume", "pvc", "pv "]),
+        ("registry", ["image registry", "registry", "imageregistry"]),
+        ("storage", ["storage", "ocs", "odf", "lvm", "lvms"]),
+
+        # Upgrade / Install
+        ("cvo", ["cluster version operator", "cvo", "clusterversion"]),
+        ("installer", ["installer", "install-config", "ipi ", "upi "]),
+        ("upgrade", ["upgrade", "update", "rollback", "channel"]),
+
+        # Operators / Platform
+        ("olm", ["operator lifecycle", "olm", "catalogsource", "subscription"]),
+        ("console", ["console", "management console", "web console"]),
+        ("monitoring", ["monitoring", "prometheus", "alertmanager", "thanos"]),
+        ("logging", ["logging", "fluentd", "elasticsearch", "loki"]),
+        ("insights", ["insights"]),
+        ("credentials", ["cloud credential", "credentialsrequest"]),
+
+        # krkn-specific
+        ("pod", ["pod-scenario", "pod_scenario", "pod_disruption", "pod disruption"]),
+        ("network-chaos", ["network-chaos", "network_chaos"]),
+        ("cpu_hog", ["cpu-hog", "cpu_hog"]),
+        ("memory_hog", ["memory-hog", "memory_hog"]),
+        ("io_hog", ["io-hog", "io_hog"]),
+        ("zone_outage", ["zone-outage", "zone_outage"]),
+        ("application", ["application-outage", "application_outage"]),
+        ("service", ["service-disruption", "service_disruption", "service-hijacking"]),
+        ("time", ["time-scenario", "time_action", "clock skew", "ntp"]),
+        ("power", ["power-outage", "shut_down", "shutdown"]),
+        ("syn_flood", ["syn-flood", "syn_flood"]),
+        ("http_load", ["http-load", "http_load", "vegeta"]),
+        ("kubevirt", ["kubevirt"]),
+        ("container", ["container_scenario", "container-scenario"]),
+    ]
+
+    for component, keywords in rules:
+        for kw in keywords:
+            if kw in text:
+                return component
 
     return "general"
 
