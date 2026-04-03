@@ -11,6 +11,7 @@ from src.filter.llm_filter import llm_filter_bugs
 from src.knowledge.chromadb_store import ChromaStore
 from src.knowledge.component_map import get_components_for_agent
 from src.knowledge.memory import MemoryStore
+from src.knowledge.neo4j_store import Neo4jStore
 from src.knowledge.scenario_index import ScenarioInfo
 from src.models import (
     ActionType,
@@ -43,6 +44,7 @@ class BaseDomainAgent(ABC):
         scenarios: list[ScenarioInfo],
         release: str,
         memory: MemoryStore | None = None,
+        neo4j_store: Neo4jStore | None = None,
         use_llm_filter: bool = False,
     ):
         self.agent_name = agent_name
@@ -53,19 +55,21 @@ class BaseDomainAgent(ABC):
         self.scenarios = scenarios
         self.release = release
         self.memory = memory or MemoryStore()
+        self.neo4j = neo4j_store
         self.use_llm_filter = use_llm_filter
         self.components = get_components_for_agent(agent_name)
 
     def run(self) -> AgentResult:
         """Execute the full pipeline: DISCOVER → FILTER → MAP → ANALYZE → ACT → REMEMBER."""
+        import asyncio
         logger.info("=== %s agent starting ===", self.agent_name)
 
         # DISCOVER
         bugs = self._discover()
         logger.info("DISCOVER: found %d bugs", len(bugs))
 
-        # Skip already-analyzed bugs (REMEMBER check)
-        known_keys = self.memory.get_analyzed_bug_keys()
+        # Skip already-analyzed bugs (Neo4j first, JSON fallback)
+        known_keys = self._get_known_bugs()
         new_bugs = [b for b in bugs if b.key not in known_keys]
         if len(bugs) != len(new_bugs):
             logger.info("REMEMBER: skipping %d already-analyzed bugs", len(bugs) - len(new_bugs))
@@ -90,11 +94,33 @@ class BaseDomainAgent(ABC):
             gaps=gaps,
         )
 
-        # REMEMBER
-        self.memory.remember_result(result)
+        # REMEMBER (Neo4j + JSON fallback)
+        self._remember(result)
 
         logger.info("=== %s agent complete ===", self.agent_name)
         return result
+
+    def _get_known_bugs(self) -> set[str]:
+        """Get already-analyzed bug keys from Neo4j or JSON memory."""
+        if self.neo4j:
+            try:
+                return self.neo4j.get_analyzed_bug_keys_sync()
+            except Exception as e:
+                logger.warning("Neo4j lookup failed, using JSON fallback: %s", e)
+        return self.memory.get_analyzed_bug_keys()
+
+    def _remember(self, result: AgentResult) -> None:
+        """Store results in Neo4j and JSON memory."""
+        # Always store in JSON (fast, reliable fallback)
+        self.memory.remember_result(result)
+
+        # Also store in Neo4j if available
+        if self.neo4j:
+            try:
+                self.neo4j.remember_result_sync(result)
+                logger.info("REMEMBER: stored in Neo4j")
+            except Exception as e:
+                logger.warning("Neo4j remember failed (JSON fallback used): %s", e)
 
     def _discover(self) -> list[Bug]:
         """DISCOVER: Query JIRA and Sippy for bugs and regressions."""

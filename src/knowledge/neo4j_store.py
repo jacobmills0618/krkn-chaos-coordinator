@@ -1,14 +1,13 @@
 """Neo4j Direct knowledge graph for the REMEMBER phase.
 
-Writes structured data directly to Neo4j via Cypher queries.
-No LLM needed — our data is already structured (Bug, Gap, Action objects).
+Uses the synchronous Neo4j driver. No LLM needed.
 5ms per write instead of 30 seconds with Graphiti.
 """
 
 import logging
 from datetime import datetime, timezone
 
-from neo4j import AsyncGraphDatabase
+from neo4j import GraphDatabase
 
 from src.models import AgentResult, FilterResult, GapAnalysis
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class Neo4jStore:
-    """Direct Neo4j knowledge graph — no LLM, no Graphiti."""
+    """Direct Neo4j knowledge graph — sync driver, no LLM."""
 
     def __init__(
         self,
@@ -29,21 +28,21 @@ class Neo4jStore:
         self._password = password
         self._driver = None
 
-    async def connect(self) -> bool:
+    def connect(self) -> bool:
         """Connect to Neo4j and create schema."""
         try:
-            self._driver = AsyncGraphDatabase.driver(
+            self._driver = GraphDatabase.driver(
                 self._uri, auth=(self._user, self._password)
             )
-            await self._create_schema()
+            self._driver.verify_connectivity()
+            self._create_schema()
             logger.info("Neo4j connected at %s", self._uri)
             return True
         except Exception as e:
             logger.warning("Neo4j connection failed: %s", e)
             return False
 
-    async def _create_schema(self) -> None:
-        """Create indices and constraints."""
+    def _create_schema(self) -> None:
         queries = [
             "CREATE INDEX IF NOT EXISTS FOR (b:Bug) ON (b.key)",
             "CREATE INDEX IF NOT EXISTS FOR (c:Component) ON (c.name)",
@@ -52,23 +51,23 @@ class Neo4jStore:
             "CREATE INDEX IF NOT EXISTS FOR (f:Finding) ON (f.id)",
             "CREATE INDEX IF NOT EXISTS FOR (r:Run) ON (r.id)",
         ]
-        async with self._driver.session() as session:
+        with self._driver.session() as session:
             for q in queries:
                 try:
-                    await session.run(q)
+                    session.run(q)
                 except Exception:
-                    pass  # Index may already exist
+                    pass
 
-    async def remember_result(self, result: AgentResult) -> dict:
+    def remember_result(self, result: AgentResult) -> dict:
         """Store an agent run's results in the graph."""
         timestamp = datetime.now(timezone.utc).isoformat()
         new_bugs = 0
         new_gaps = 0
 
-        async with self._driver.session() as session:
+        with self._driver.session() as session:
             # Store the run
             run_id = f"{result.agent_name}_{timestamp}"
-            await session.run(
+            session.run(
                 """
                 CREATE (r:Run {
                     id: $id, agent: $agent, timestamp: $ts,
@@ -85,7 +84,7 @@ class Neo4jStore:
 
             # Store bugs + components
             for bug in result.bugs_discovered:
-                r = await session.run(
+                r = session.run(
                     """
                     MERGE (c:Component {name: $component})
                     MERGE (b:Bug {key: $key})
@@ -100,13 +99,13 @@ class Neo4jStore:
                     priority=bug.priority, status=bug.status,
                     created=bug.created, url=bug.url, ts=timestamp,
                 )
-                record = await r.single()
+                record = r.single()
                 if record and record["is_new"]:
                     new_bugs += 1
 
-            # Store filter decisions (skipped bugs)
+            # Store filter decisions
             for fr in result.bugs_filtered_out:
-                await session.run(
+                session.run(
                     """
                     MERGE (b:Bug {key: $key})
                     SET b.chaos_relevant = false, b.skip_reason = $reason
@@ -117,7 +116,7 @@ class Neo4jStore:
             # Store gaps
             for gap in result.gaps:
                 gap_id = f"{gap.bug.key}_{result.agent_name}"
-                r = await session.run(
+                r = session.run(
                     """
                     MATCH (b:Bug {key: $bug_key})
                     MERGE (g:Gap {id: $gap_id})
@@ -140,12 +139,12 @@ class Neo4jStore:
                     base_scenario=gap.base_scenario,
                     ts=timestamp, agent=result.agent_name,
                 )
-                record = await r.single()
+                record = r.single()
                 if record and record["is_new"]:
                     new_gaps += 1
 
             # Link run to agent
-            await session.run(
+            session.run(
                 """
                 MERGE (a:Agent {name: $agent})
                 WITH a
@@ -158,10 +157,12 @@ class Neo4jStore:
         logger.info("Neo4j REMEMBER: %d new bugs, %d new gaps", new_bugs, new_gaps)
         return {"new_bugs": new_bugs, "new_gaps": new_gaps}
 
-    async def mark_gap_resolved(self, bug_key: str, issue_url: str) -> None:
-        """Mark a gap as resolved with the created issue/PR URL."""
-        async with self._driver.session() as session:
-            await session.run(
+    # Sync alias for pipeline compatibility
+    remember_result_sync = remember_result
+
+    def mark_gap_resolved(self, bug_key: str, issue_url: str) -> None:
+        with self._driver.session() as session:
+            session.run(
                 """
                 MATCH (b:Bug {key: $key})-[:HAS_GAP]->(g:Gap {status: 'open'})
                 SET g.status = 'resolved', g.resolved_at = $ts
@@ -172,12 +173,14 @@ class Neo4jStore:
                 ts=datetime.now(timezone.utc).isoformat(),
             )
 
-    async def add_finding(self, agent_name: str, finding: str) -> None:
-        """Record a learned finding."""
-        async with self._driver.session() as session:
-            await session.run(
+    mark_gap_resolved_sync = mark_gap_resolved
+
+    def add_finding(self, agent_name: str, finding: str) -> None:
+        with self._driver.session() as session:
+            session.run(
                 """
                 MERGE (a:Agent {name: $agent})
+                WITH a
                 CREATE (f:Finding {
                     id: $id, text: $finding, created_at: $ts
                 })
@@ -188,40 +191,37 @@ class Neo4jStore:
                 ts=datetime.now(timezone.utc).isoformat(),
             )
 
-    async def is_bug_analyzed(self, bug_key: str) -> bool:
-        """Check if a bug was already analyzed."""
-        async with self._driver.session() as session:
-            r = await session.run(
-                "MATCH (b:Bug {key: $key}) RETURN b.key AS key",
-                key=bug_key,
-            )
-            return await r.single() is not None
+    def is_bug_analyzed(self, bug_key: str) -> bool:
+        with self._driver.session() as session:
+            r = session.run("MATCH (b:Bug {key: $key}) RETURN b.key AS key", key=bug_key)
+            return r.single() is not None
 
-    async def get_analyzed_bug_keys(self) -> set[str]:
-        """Get all previously analyzed bug keys."""
-        async with self._driver.session() as session:
-            r = await session.run("MATCH (b:Bug) RETURN b.key AS key")
-            records = [record async for record in r]
-            return {record["key"] for record in records}
+    def get_analyzed_bug_keys(self) -> set[str]:
+        with self._driver.session() as session:
+            r = session.run("MATCH (b:Bug) RETURN b.key AS key")
+            return {record["key"] for record in r}
 
-    async def get_open_gaps(self) -> list[dict]:
-        """Get all unresolved gaps."""
-        async with self._driver.session() as session:
-            r = await session.run(
+    # Sync alias
+    get_analyzed_bug_keys_sync = get_analyzed_bug_keys
+
+    def get_open_gaps(self) -> list[dict]:
+        with self._driver.session() as session:
+            r = session.run(
                 """
                 MATCH (b:Bug)-[:HAS_GAP]->(g:Gap {status: 'open'})
                 RETURN b.key AS bug_key, b.summary AS summary,
-                       b.component AS component, g.confidence AS confidence,
-                       g.reasoning AS reasoning, g.opened_at AS opened_at
+                       g.confidence AS confidence, g.reasoning AS reasoning,
+                       g.opened_at AS opened_at
                 ORDER BY g.confidence DESC
                 """
             )
-            return [dict(record) async for record in r]
+            return [dict(record) for record in r]
 
-    async def get_component_gap_counts(self) -> list[dict]:
-        """Get gap counts per component — for trend detection."""
-        async with self._driver.session() as session:
-            r = await session.run(
+    get_open_gaps_sync = get_open_gaps
+
+    def get_component_gap_counts(self) -> list[dict]:
+        with self._driver.session() as session:
+            r = session.run(
                 """
                 MATCH (c:Component)-[:HAS_BUG]->(b)-[:HAS_GAP]->(g)
                 RETURN c.name AS component, count(g) AS gaps,
@@ -230,25 +230,26 @@ class Neo4jStore:
                 ORDER BY gaps DESC
                 """
             )
-            return [dict(record) async for record in r]
+            return [dict(record) for record in r]
 
-    async def get_uncovered_components(self) -> list[dict]:
-        """Find components with bugs but no chaos scenarios."""
-        async with self._driver.session() as session:
-            r = await session.run(
+    get_component_gap_counts_sync = get_component_gap_counts
+
+    def get_similar_resolved_bugs(self, component: str) -> list[dict]:
+        with self._driver.session() as session:
+            r = session.run(
                 """
-                MATCH (c:Component)-[:HAS_BUG]->(b)
-                WHERE NOT (c)<-[:COVERS]-(:Scenario)
-                RETURN c.name AS component, count(b) AS bug_count
-                ORDER BY bug_count DESC
-                """
+                MATCH (c:Component {name: $component})-[:HAS_BUG]->(b)
+                      -[:HAS_GAP]->(g {status: 'resolved'})-[:RESOLVED_BY]->(a)
+                RETURN b.key AS bug_key, b.summary AS summary,
+                       a.url AS issue_url, g.reasoning AS reasoning
+                """,
+                component=component,
             )
-            return [dict(record) async for record in r]
+            return [dict(record) for record in r]
 
-    async def get_run_history(self, limit: int = 20) -> list[dict]:
-        """Get recent run history for trend tracking."""
-        async with self._driver.session() as session:
-            r = await session.run(
+    def get_run_history(self, limit: int = 20) -> list[dict]:
+        with self._driver.session() as session:
+            r = session.run(
                 """
                 MATCH (r:Run)
                 RETURN r.agent AS agent, r.timestamp AS timestamp,
@@ -258,23 +259,8 @@ class Neo4jStore:
                 """,
                 limit=limit,
             )
-            return [dict(record) async for record in r]
+            return [dict(record) for record in r]
 
-    async def get_similar_resolved_bugs(self, component: str) -> list[dict]:
-        """Find resolved bugs in the same component — for recommendations."""
-        async with self._driver.session() as session:
-            r = await session.run(
-                """
-                MATCH (c:Component {name: $component})-[:HAS_BUG]->(b)
-                      -[:HAS_GAP]->(g {status: 'resolved'})-[:RESOLVED_BY]->(a)
-                RETURN b.key AS bug_key, b.summary AS summary,
-                       a.url AS issue_url, g.reasoning AS reasoning
-                """,
-                component=component,
-            )
-            return [dict(record) async for record in r]
-
-    async def close(self) -> None:
-        """Close Neo4j connection."""
+    def close(self) -> None:
         if self._driver:
-            await self._driver.close()
+            self._driver.close()
