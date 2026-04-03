@@ -38,42 +38,62 @@ class JiraClient:
         return self._search(jql, max_results)
 
     def _search(self, jql: str, max_results: int) -> list[Bug]:
-        """Execute a JQL search and return Bug objects."""
+        """Execute a JQL search with cursor-based pagination and return Bug objects.
+
+        Atlassian's /rest/api/3/search/jql uses nextPageToken (not startAt).
+        """
         url = f"{self._config.url}/rest/api/3/search/jql"
-        params = {
-            "jql": jql,
-            "maxResults": max_results,
-            "fields": "summary,description,status,priority,components,created",
-        }
+        logger.info("JIRA query: %s (max: %d)", jql, max_results)
 
-        logger.info("JIRA query: %s", jql)
-
-        try:
-            response = self._session.get(url, params=params, timeout=30)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            logger.error("JIRA query failed: %s", e)
-            return []
-
-        data = response.json()
         bugs = []
-        for issue in data.get("issues", []):
-            fields = issue["fields"]
-            components = fields.get("components", [])
-            component_name = components[0]["name"] if components else "Unknown"
+        page_size = min(max_results, 100)
+        next_token = None
 
-            bugs.append(
-                Bug(
-                    key=issue["key"],
-                    summary=fields.get("summary", ""),
-                    description=fields.get("description", "") or "",
-                    component=component_name,
-                    priority=fields.get("priority", {}).get("name", "Unknown"),
-                    status=fields.get("status", {}).get("name", "Unknown"),
-                    created=fields.get("created", ""),
-                    url=f"{self._config.url}/browse/{issue['key']}",
+        while len(bugs) < max_results:
+            params = {
+                "jql": jql,
+                "maxResults": page_size,
+                "fields": "summary,description,status,priority,components,created",
+            }
+            if next_token:
+                params["nextPageToken"] = next_token
+
+            try:
+                response = self._session.get(url, params=params, timeout=30)
+                response.raise_for_status()
+            except requests.RequestException as e:
+                logger.error("JIRA query failed: %s", e)
+                break
+
+            data = response.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+
+            for issue in issues:
+                fields = issue["fields"]
+                components = fields.get("components", [])
+                component_name = components[0]["name"] if components else "Unknown"
+
+                bugs.append(
+                    Bug(
+                        key=issue["key"],
+                        summary=fields.get("summary", ""),
+                        description=fields.get("description", "") or "",
+                        component=component_name,
+                        priority=fields.get("priority", {}).get("name", "Unknown"),
+                        status=fields.get("status", {}).get("name", "Unknown"),
+                        created=fields.get("created", ""),
+                        url=f"{self._config.url}/browse/{issue['key']}",
+                    )
                 )
-            )
 
-        logger.info("Found %d bugs", len(bugs))
-        return bugs
+            # Cursor-based pagination
+            next_token = data.get("nextPageToken")
+            is_last = data.get("isLast", True)
+
+            if is_last or not next_token:
+                break
+
+        logger.info("Found %d bugs (unique)", len(bugs))
+        return bugs[:max_results]

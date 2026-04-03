@@ -1,0 +1,2082 @@
+{
+  "analyzed_bugs": {
+    "OCPBUGS-81689": {
+      "summary": "Under high CPU load state desynchronization between OVS (has interface) and ovn-controller (no chassis binding)",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81685": {
+      "summary": "BGP e2e test route_advertisements fails with curl: option -m 3: expected a proper numerical parameter",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81684": {
+      "summary": "UDN - Controller pod-selector-address-set-manager-addrset fail to set addresses for address set.",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81653": {
+      "summary": "HCP: Hosted Cluster lost ability to communicate via the default k8s svc ip (172.30.0.1) on hub cluster and could not attach volumes as a result",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81646": {
+      "summary": "EgressIP packets being dropped in VSphere using",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81639": {
+      "summary": "[release-4.17] Annotations: k8s.ovn.org/external-gw-pod-ips is not being updated when gateway pod goes down",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81634": {
+      "summary": "[4.21] UDN DHCP outage on hosted controlplane / hypershift clusters",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81566": {
+      "summary": "Our customer has reported the following issues to Red Hat Support that they have encountered after a CNI migration from OpenShiftSDN to OVNKubernetes:",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81548": {
+      "summary": "Dual-stack cluster: Node with link-local IPv6 prevents new nodes from joining and destabilizes OVN-Kubernetes",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81526": {
+      "summary": "[4.19] UDN service flows on br-ex are not correctly considering ip family",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81523": {
+      "summary": "[4.20] UDN service flows on br-ex are not correctly considering ip family",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81510": {
+      "summary": "[4.20] UDN service flows on br-ex are not correctly considering ip family",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81479": {
+      "summary": "[4.18] - Application pods traffic is dropped during the kube-apiserver rollout",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81478": {
+      "summary": "[4.19] - Application pods traffic is dropped during the kube-apiserver rollout",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81477": {
+      "summary": "[4.20] - Application pods traffic is dropped during the kube-apiserver rollout",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81475": {
+      "summary": "[4.21] - Application pods traffic is dropped during the kube-apiserver rollout",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81461": {
+      "summary": "Pathological event failure complaining about NetworkNotReady",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81342": {
+      "summary": "OVS is dropping packet at the main interface intermittently while using LocalNet Nad attached to Virtual Machine. ",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81329": {
+      "summary": "[release-4.18] Annotations: k8s.ovn.org/external-gw-pod-ips is not being updated when gateway pod goes down",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81326": {
+      "summary": "Zombie logical switch port for deleted virtualmachineinstance on localnet secondary network causes connectivity issues",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81283": {
+      "summary": "OCP Docs Missing Limitation: ServiceCIDR Expansion Not Supported with OVN-Kubernetes in OCP 4.20",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking"
+    },
+    "OCPBUGS-81687": {
+      "summary": "Collect size of resources in etcd along with count with must-gather",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81561": {
+      "summary": "Update Release Configs after event-ttl GA",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81560": {
+      "summary": "Update KAS-O after event-TTL GA",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81323": {
+      "summary": "The etcd-operator incorrectly reports healthy etcd members as unhealthy due to API server throttling, causing false positive cluster degradation alerts.",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81146": {
+      "summary": "4.20 - Extreme CPU Usage observed from Kubernetes components due to golang-fips TLS1.3 handling",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81145": {
+      "summary": "4.21 - Extreme CPU Usage observed from Kubernetes components due to golang-fips TLS1.3 handling",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81638": {
+      "summary": "Track 4.21 cherry-pick: Create automation for swap;noncnv node testcases in openshift/origin",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:11:52.873521",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-81621": {
+      "summary": "Custom Garbage Collector Configuration (validation by Engineering)",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:11:52.873521",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-81627": {
+      "summary": "Bootstrap deadlock due to ClusterResourceQuota Admission plugin",
+      "component": "Cluster Version Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81625": {
+      "summary": "Prevent Scaling of Machine Config Operator Components to Zero Replicas in `openshift-machine-config-operator` Namespace to Avoid Configuration Drift and Inconsistencies",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81550": {
+      "summary": "machine-config operator is degraded when installing cluster with custom-dns enabled on azure",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81480": {
+      "summary": "OpenShift Installer Does Not Set Explicit maxUnavailable in MachineConfigPools",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81476": {
+      "summary": "Component Readiness: [Machine Config Operator] [Other]  PinnedImages GC test image cleanup issue",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81289": {
+      "summary": "Remove machine count conditional in MCP's status update function",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81282": {
+      "summary": "  machine-config-server: controller-runtime logger not initialized - \"log.SetLogger(...) was never called\" warning on startup",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81187": {
+      "summary": "OpenShift Cluster Installation with multi-payload on 4.22.0-ec.4 is failing on s390x",
+      "component": "Cluster Version Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81144": {
+      "summary": "[Automated] Update AMI Whitelist",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81473": {
+      "summary": "[release-4.18]Catalog operator pod crashed during SNO cluster installation",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81452": {
+      "summary": "ClusterExtension webhook-operator install stalls in RollingOut because the generated deployment never becomes Available",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81325": {
+      "summary": "No AAAA record or IPV6 entry for \"infogw.api.openshift.com\"",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81311": {
+      "summary": "[release-4.21]Fix golangci-lint timeout in CI",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81310": {
+      "summary": "Fix golangci-lint timeout in CI",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81292": {
+      "summary": "[release-4.20] - add jiazha to approvers",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81291": {
+      "summary": "[release-4.21] - add jiazha to approvers",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81290": {
+      "summary": "add jiazha to approvers",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81159": {
+      "summary": "CMO configuration with unsupported collection profile isn't rejected upfront",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81676": {
+      "summary": "openshift-apiserver stuck in PreconditionNotReady blocking AWS STS deployment",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81507": {
+      "summary": "Scheduler test failure with Multi-AZ Clusters service pods test",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81124": {
+      "summary": "Clusters born in OpenShift 4.9 and earlier may have duplicate members upon upgrading to 4.21",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80958": {
+      "summary": "Kube-apiserver operator: KubeAPIServer status.nodeStatuses not cleared on Node delete (same-name replacement)",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80957": {
+      "summary": "CEO: Etcd status.nodeStatuses not cleared on Node delete (same-name replacement)",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80945": {
+      "summary": "CVE-2026-33413 openshift4/ose-etcd-rhel9: etcd: Authorization bypass allows information disclosure and denial of service [openshift-4.17]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80889": {
+      "summary": "CVE-2026-33186 openshift-secondary-scheduler-operator/secondary-scheduler-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [osso-1.5]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80888": {
+      "summary": "CVE-2026-33186 openshift-secondary-scheduler-operator/secondary-scheduler-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [osso-1.4]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80887": {
+      "summary": "CVE-2026-33186 openshift-secondary-scheduler-operator/secondary-scheduler-operator-bundle: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [osso-1.4]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80886": {
+      "summary": "CVE-2026-33186 openshift-secondary-scheduler-operator/secondary-scheduler-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [osso-1.3]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80885": {
+      "summary": "CVE-2026-33186 openshift-secondary-scheduler-operator/secondary-scheduler-operator-bundle: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [osso-1.3]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80841": {
+      "summary": "CVE-2026-33186 openshift4/ose-openshift-apiserver-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80812": {
+      "summary": "CVE-2026-33186 openshift4/ose-hyperkube-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80803": {
+      "summary": "CVE-2026-33186 openshift4/ose-etcd-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80772": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-policy-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "kube-controller-manager",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80770": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-openshift-apiserver-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80763": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-scheduler-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80762": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-controller-manager-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "kube-controller-manager",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80760": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-apiserver-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80757": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-etcd-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80752": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-capacity-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80731": {
+      "summary": "CVE-2026-33186 openshift4/ose-apiserver-network-proxy-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80664": {
+      "summary": "CVE-2026-33186 openshift4/ose-openshift-apiserver-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80635": {
+      "summary": "CVE-2026-33186 openshift4/ose-hyperkube-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80626": {
+      "summary": "CVE-2026-33186 openshift4/ose-etcd-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80599": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-policy-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "kube-controller-manager",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80597": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-openshift-apiserver-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80590": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-scheduler-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80589": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-controller-manager-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "kube-controller-manager",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80587": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-apiserver-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80584": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-etcd-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80580": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-capacity-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80559": {
+      "summary": "CVE-2026-33186 openshift4/ose-apiserver-network-proxy-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80486": {
+      "summary": "CVE-2026-33186 openshift4/ose-openshift-apiserver-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80458": {
+      "summary": "CVE-2026-33186 openshift4/ose-hyperkube-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80449": {
+      "summary": "CVE-2026-33186 openshift4/ose-etcd-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80423": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-policy-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "kube-controller-manager",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80421": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-openshift-apiserver-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "openshift-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80414": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-scheduler-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80413": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-controller-manager-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "kube-controller-manager",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80411": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-kube-apiserver-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "kube-apiserver",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80408": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-etcd-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Etcd",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-80404": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-capacity-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "kube-scheduler",
+      "analyzed_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane"
+    },
+    "OCPBUGS-81640": {
+      "summary": "[AWS EUSC] CCM Test Failure on AWS EUSC",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81635": {
+      "summary": "[AWS Custom DNS] Increase timeout to the AWS Custom DNS cluster to ensure MCO completes all processes",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81624": {
+      "summary": "\"create manifests\" with \"type: n4a-standard-4\" and \"architecture: arm64\" got error \"instance type architecture amd64 does not match specified architecture arm64\"",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81581": {
+      "summary": "customer is trying to set up a 3 tier network.",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81578": {
+      "summary": "[Azure UPI] dropping support for field used in image gallery versions ",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81555": {
+      "summary": "MCO cleanup removes locally created initramfs-etc tracking added via a custom service, which causes NBDE Tang decryption to fail on reboot in DHCP-less environments.",
+      "component": "Installer / Agent based installation",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81509": {
+      "summary": "ASO CRD file contains duplicates",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81294": {
+      "summary": "Component Readiness: [Installer / openshift-installer] [Other] metal IPI install failed because it failed to download metadata for epel repo",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81023": {
+      "summary": "MCS cannot work with newer versions of Ignition",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80970": {
+      "summary": "ABI installs failing with nodes unable to pull ignition",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80953": {
+      "summary": "ClusterRole name conflict between servicemesh and lvm operators",
+      "component": "Cloud Credential Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80925": {
+      "summary": "The default service account in the CVO namespace should not have cluster-admin permissions.",
+      "component": "Cluster Version Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80830": {
+      "summary": "CVE-2026-33186 openshift4/ose-machine-config-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80820": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80819": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80746": {
+      "summary": "CVE-2026-33186 openshift4/ose-baremetal-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80653": {
+      "summary": "CVE-2026-33186 openshift4/ose-machine-config-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80643": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80642": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80574": {
+      "summary": "CVE-2026-33186 openshift4/ose-baremetal-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80475": {
+      "summary": "CVE-2026-33186 openshift4/ose-machine-config-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80466": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80465": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80398": {
+      "summary": "CVE-2026-33186 openshift4/ose-baremetal-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80294": {
+      "summary": "CVE-2026-33186 openshift4/ose-machine-config-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80286": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80285": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80284": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-altinfra-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80245": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-version-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Cluster Version Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80218": {
+      "summary": "CVE-2026-33186 openshift4/ose-baremetal-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80119": {
+      "summary": "CVE-2026-33186 openshift4/ose-machine-config-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80111": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80110": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80109": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-altinfra-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-80043": {
+      "summary": "CVE-2026-33186 openshift4/ose-baremetal-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-79971": {
+      "summary": "CVE-2026-33186 openshift4/ose-machine-config-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.16.z]",
+      "component": "Machine Config Operator",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-79968": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.16.z]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-79967": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.16.z]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-79966": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-altinfra-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.16.z]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-79940": {
+      "summary": "CVE-2026-33186 openshift4/ose-baremetal-installer-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.16.z]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-79897": {
+      "summary": "CVE-2026-33186 openshift4/ose-installer-artifacts: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.15.z]",
+      "component": "Installer / openshift-installer",
+      "analyzed_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle"
+    },
+    "OCPBUGS-81273": {
+      "summary": "ImageID of pod is inconsistant, sometimes showing full digest and sometimes showing the crio imageId",
+      "component": "Node / CRI-O",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-80988": {
+      "summary": "ovnkube-upgrades-prepuller pods stuck in ContainerCreating during 4.19.17 to 4.19.25 upgrade on HCP MC, blocking network operator progression.",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-79544": {
+      "summary": "Component Readiness: monitor pod cannot start",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-79502": {
+      "summary": "Hypershift e2e tests fail after AutoSizingReserved enabled",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-79483": {
+      "summary": "kubelet terminates kube-apiserver gracefully failing consistently in several jobs",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-79473": {
+      "summary": "kubelet terminates kube-apiserver gracefully failing consistently in several jobs",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-79372": {
+      "summary": "kubelet terminates kube-apiserver gracefully failing consistently in several jobs",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-79371": {
+      "summary": "kubelet terminates kube-apiserver gracefully failing consistently in several jobs",
+      "component": "Node / Kubelet",
+      "analyzed_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine"
+    },
+    "OCPBUGS-81628": {
+      "summary": "openshift-ovn-kubernetes namespace don't have the permission to create RA for managed mode",
+      "component": "Networking / cluster-network-operator",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-81530": {
+      "summary": "Add extra line to the certificate creation to fix ongoing issue when configuring custom ingress certs",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-81442": {
+      "summary": "e2e-aws-operator-techpreview failing TestUnsupportedConfigOverride/dynamic-config-manager after PR #1385",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-81281": {
+      "summary": "Set Ceph noout Flag During SDN-to-OVN Migration to Prevent Unnecessary Recovery",
+      "component": "Networking / openshift-sdn",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-81274": {
+      "summary": "Candace test - ignore",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-81272": {
+      "summary": "VSphere e2e tests fail on HTTPRoute hostname",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-81192": {
+      "summary": "[E2E] TestUnmanagedDNSToManagedDNSInternalIngressController GCP flakes during internal\u2192external LB migration due to DNSReady race",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80966": {
+      "summary": "Ingress operator produces malformed PEM bundle when tls.crt lacks trailing newline",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80960": {
+      "summary": "OVN-Kubernetes: survivor local SB missing remote peer after same-name control-plane replace (east\u2013west broken)",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80941": {
+      "summary": "Route is not handled if NamespaceSelector is defined in IngressController",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80932": {
+      "summary": "DCM: Router does not dynamically update static backend server",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80851": {
+      "summary": "CVE-2026-33186 openshift4/ose-ovn-kubernetes-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80810": {
+      "summary": "CVE-2026-33186 openshift4/ose-haproxy-router-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80780": {
+      "summary": "CVE-2026-33186 openshift4/ose-coredns-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Networking / DNS",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80759": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-ingress-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80714": {
+      "summary": "CVE-2026-33186 openshift4/cloud-network-config-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80674": {
+      "summary": "CVE-2026-33186 openshift4/ose-ovn-kubernetes-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80633": {
+      "summary": "CVE-2026-33186 openshift4/ose-haproxy-router-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80607": {
+      "summary": "CVE-2026-33186 openshift4/ose-coredns-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Networking / DNS",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80586": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-ingress-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80540": {
+      "summary": "CVE-2026-33186 openshift4/cloud-network-config-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80496": {
+      "summary": "CVE-2026-33186 openshift4/ose-ovn-kubernetes-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80456": {
+      "summary": "CVE-2026-33186 openshift4/ose-haproxy-router-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80431": {
+      "summary": "CVE-2026-33186 openshift4/ose-coredns-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Networking / DNS",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80410": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-ingress-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80363": {
+      "summary": "CVE-2026-33186 openshift4/cloud-network-config-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80316": {
+      "summary": "CVE-2026-33186 openshift4/ose-ovn-kubernetes-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Networking / ovn-kubernetes",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80275": {
+      "summary": "CVE-2026-33186 openshift4/ose-haproxy-router-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Networking / router",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80251": {
+      "summary": "CVE-2026-33186 openshift4/ose-coredns-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Networking / DNS",
+      "analyzed_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking"
+    },
+    "OCPBUGS-80969": {
+      "summary": "Migrate image to image gallery",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80793": {
+      "summary": "CVE-2026-33186 openshift4/ose-docker-registry-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80758": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80620": {
+      "summary": "CVE-2026-33186 openshift4/ose-docker-registry-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80585": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80443": {
+      "summary": "CVE-2026-33186 openshift4/ose-docker-registry-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80409": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80264": {
+      "summary": "CVE-2026-33186 openshift4/ose-docker-registry-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80228": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80091": {
+      "summary": "CVE-2026-33186 openshift4/ose-docker-registry-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-80053": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.17]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-79945": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.16.z]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-79878": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.15.z]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-79826": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.14.z]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-79782": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.13.z]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-79749": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-image-registry-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.12.z]",
+      "component": "Image Registry",
+      "analyzed_at": "2026-04-03T12:29:42.244137",
+      "agent": "storage"
+    },
+    "OCPBUGS-81652": {
+      "summary": "CVE-2025-68121 golang-github-prometheus-promu: Unexpected session resumption in crypto/tls [openshift-4.19]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81554": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-monitoring-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.22]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81494": {
+      "summary": "CVE-2026-33186 openshift4/ose-thanos-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.22]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-81188": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-olm-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.22]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80870": {
+      "summary": "CVE-2026-33186 openshift4/ose-thanos-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80868": {
+      "summary": "CVE-2026-33186 openshift4/ose-telemeter-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80855": {
+      "summary": "CVE-2026-33186 openshift4/ose-prometheus-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80848": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-lifecycle-manager-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80847": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-framework-tools-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80840": {
+      "summary": "CVE-2026-33186 openshift4/ose-olm-operator-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80823": {
+      "summary": "CVE-2026-33186 openshift4/ose-kube-state-metrics-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80769": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-olm-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80765": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-monitoring-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80716": {
+      "summary": "CVE-2026-33186 openshift4/kube-metrics-server-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.21]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80693": {
+      "summary": "CVE-2026-33186 openshift4/ose-thanos-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80691": {
+      "summary": "CVE-2026-33186 openshift4/ose-telemeter-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80678": {
+      "summary": "CVE-2026-33186 openshift4/ose-prometheus-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80671": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-lifecycle-manager-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80670": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-framework-tools-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80663": {
+      "summary": "CVE-2026-33186 openshift4/ose-olm-operator-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80646": {
+      "summary": "CVE-2026-33186 openshift4/ose-kube-state-metrics-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80596": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-olm-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80592": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-monitoring-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80542": {
+      "summary": "CVE-2026-33186 openshift4/kube-metrics-server-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.20]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80515": {
+      "summary": "CVE-2026-33186 openshift4/ose-thanos-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80513": {
+      "summary": "CVE-2026-33186 openshift4/ose-telemeter-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80500": {
+      "summary": "CVE-2026-33186 openshift4/ose-prometheus-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80493": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-lifecycle-manager-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80492": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-framework-tools-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80485": {
+      "summary": "CVE-2026-33186 openshift4/ose-olm-operator-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80420": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-olm-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80416": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-monitoring-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80365": {
+      "summary": "CVE-2026-33186 openshift4/kube-metrics-server-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.19]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80335": {
+      "summary": "CVE-2026-33186 openshift4/ose-thanos-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80333": {
+      "summary": "CVE-2026-33186 openshift4/ose-telemeter-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80320": {
+      "summary": "CVE-2026-33186 openshift4/ose-prometheus-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80312": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-lifecycle-manager-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80311": {
+      "summary": "CVE-2026-33186 openshift4/ose-operator-framework-tools-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80304": {
+      "summary": "CVE-2026-33186 openshift4/ose-olm-operator-controller-rhel9: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80239": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-olm-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "OLM",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    },
+    "OCPBUGS-80235": {
+      "summary": "CVE-2026-33186 openshift4/ose-cluster-monitoring-rhel9-operator: gRPC-Go: Authorization bypass due to improper HTTP/2 path validation [openshift-4.18]",
+      "component": "Monitoring",
+      "analyzed_at": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform"
+    }
+  },
+  "gaps": {
+    "OCPBUGS-81689_networking": {
+      "bug_key": "OCPBUGS-81689",
+      "bug_summary": "Under high CPU load state desynchronization between OVS (has interface) and ovn-controller (no chassis binding)",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81685_networking": {
+      "bug_key": "OCPBUGS-81685",
+      "bug_summary": "BGP e2e test route_advertisements fails with curl: option -m 3: expected a proper numerical parameter",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81684_networking": {
+      "bug_key": "OCPBUGS-81684",
+      "bug_summary": "UDN - Controller pod-selector-address-set-manager-addrset fail to set addresses for address set.",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81653_networking": {
+      "bug_key": "OCPBUGS-81653",
+      "bug_summary": "HCP: Hosted Cluster lost ability to communicate via the default k8s svc ip (172.30.0.1) on hub cluster and could not attach volumes as a result",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81646_networking": {
+      "bug_key": "OCPBUGS-81646",
+      "bug_summary": "EgressIP packets being dropped in VSphere using",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81639_networking": {
+      "bug_key": "OCPBUGS-81639",
+      "bug_summary": "[release-4.17] Annotations: k8s.ovn.org/external-gw-pod-ips is not being updated when gateway pod goes down",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81634_networking": {
+      "bug_key": "OCPBUGS-81634",
+      "bug_summary": "[4.21] UDN DHCP outage on hosted controlplane / hypershift clusters",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 90,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Known failure mode (+20); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81566_networking": {
+      "bug_key": "OCPBUGS-81566",
+      "bug_summary": "Our customer has reported the following issues to Red Hat Support that they have encountered after a CNI migration from OpenShiftSDN to OVNKubernetes:",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81526_networking": {
+      "bug_key": "OCPBUGS-81526",
+      "bug_summary": "[4.19] UDN service flows on br-ex are not correctly considering ip family",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81461_networking": {
+      "bug_key": "OCPBUGS-81461",
+      "bug_summary": "Pathological event failure complaining about NetworkNotReady",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 90,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Known failure mode (+20); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81329_networking": {
+      "bug_key": "OCPBUGS-81329",
+      "bug_summary": "[release-4.18] Annotations: k8s.ovn.org/external-gw-pod-ips is not being updated when gateway pod goes down",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Clear repro (+20); Partial: scenarios/kind/scheduler.yml (+25); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81627_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81627",
+      "bug_summary": "Bootstrap deadlock due to ClusterResourceQuota Admission plugin",
+      "component": "Cluster Version Operator",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Partial: None (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81625_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81625",
+      "bug_summary": "Prevent Scaling of Machine Config Operator Components to Zero Replicas in `openshift-machine-config-operator` Namespace to Avoid Configuration Drift and Inconsistencies",
+      "component": "Machine Config Operator",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Partial: None (+25); Similar in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81550_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81550",
+      "bug_summary": "machine-config operator is degraded when installing cluster with custom-dns enabled on azure",
+      "component": "Machine Config Operator",
+      "confidence": 75,
+      "action_type": "draft_pr",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Partial: None (+25); Known failure mode (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81476_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81476",
+      "bug_summary": "Component Readiness: [Machine Config Operator] [Other]  PinnedImages GC test image cleanup issue",
+      "component": "Machine Config Operator",
+      "confidence": 30,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81452_operators_platform": {
+      "bug_key": "OCPBUGS-81452",
+      "bug_summary": "ClusterExtension webhook-operator install stalls in RollingOut because the generated deployment never becomes Available",
+      "component": "OLM",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Partial: None (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform",
+      "status": "open"
+    },
+    "OCPBUGS-81325_operators_platform": {
+      "bug_key": "OCPBUGS-81325",
+      "bug_summary": "No AAAA record or IPV6 entry for \"infogw.api.openshift.com\"",
+      "component": "Monitoring",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Partial: None (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform",
+      "status": "open"
+    },
+    "OCPBUGS-81311_operators_platform": {
+      "bug_key": "OCPBUGS-81311",
+      "bug_summary": "[release-4.21]Fix golangci-lint timeout in CI",
+      "component": "OLM",
+      "confidence": 50,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Known failure mode (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform",
+      "status": "open"
+    },
+    "OCPBUGS-81310_operators_platform": {
+      "bug_key": "OCPBUGS-81310",
+      "bug_summary": "Fix golangci-lint timeout in CI",
+      "component": "OLM",
+      "confidence": 50,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Known failure mode (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform",
+      "status": "open"
+    },
+    "OCPBUGS-81159_operators_platform": {
+      "bug_key": "OCPBUGS-81159",
+      "bug_summary": "CMO configuration with unsupported collection profile isn't rejected upfront",
+      "component": "Monitoring",
+      "confidence": 30,
+      "action_type": "github_issue",
+      "base_scenario": null,
+      "reasoning": "Clear repro (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform",
+      "status": "open"
+    },
+    "OCPBUGS-81676_control_plane": {
+      "bug_key": "OCPBUGS-81676",
+      "bug_summary": "openshift-apiserver stuck in PreconditionNotReady blocking AWS STS deployment",
+      "component": "openshift-apiserver",
+      "confidence": 50,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/openshift/openshift-apiserver.yml",
+      "reasoning": "Partial match: scenarios/openshift/openshift-apiserver.yml (+25); Similar pattern in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane",
+      "status": "open"
+    },
+    "OCPBUGS-81507_control_plane": {
+      "bug_key": "OCPBUGS-81507",
+      "bug_summary": "Scheduler test failure with Multi-AZ Clusters service pods test",
+      "component": "kube-scheduler",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Known failure mode (+20); Similar pattern in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane",
+      "status": "open"
+    },
+    "OCPBUGS-81124_control_plane": {
+      "bug_key": "OCPBUGS-81124",
+      "bug_summary": "Clusters born in OpenShift 4.9 and earlier may have duplicate members upon upgrading to 4.21",
+      "component": "Etcd",
+      "confidence": 50,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/pod_etcd.yml",
+      "reasoning": "Partial match: scenarios/kind/pod_etcd.yml (+25); Similar pattern in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane",
+      "status": "open"
+    },
+    "OCPBUGS-81640_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81640",
+      "bug_summary": "[AWS EUSC] CCM Test Failure on AWS EUSC",
+      "component": "Installer / openshift-installer",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Known failure mode (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81635_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81635",
+      "bug_summary": "[AWS Custom DNS] Increase timeout to the AWS Custom DNS cluster to ensure MCO completes all processes",
+      "component": "Installer / openshift-installer",
+      "confidence": 70,
+      "action_type": "draft_pr",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Known failure mode (+20); Similar pattern in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81624_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81624",
+      "bug_summary": "\"create manifests\" with \"type: n4a-standard-4\" and \"architecture: arm64\" got error \"instance type architecture amd64 does not match specified architecture arm64\"",
+      "component": "Installer / openshift-installer",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81555_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81555",
+      "bug_summary": "MCO cleanup removes locally created initramfs-etc tracking added via a custom service, which causes NBDE Tang decryption to fail on reboot in DHCP-less environments.",
+      "component": "Installer / Agent based installation",
+      "confidence": 25,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25)",
+      "created_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81294_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-81294",
+      "bug_summary": "Component Readiness: [Installer / openshift-installer] [Other] metal IPI install failed because it failed to download metadata for epel repo",
+      "component": "Installer / openshift-installer",
+      "confidence": 55,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Known failure mode (+20); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-80970_upgrade_lifecycle": {
+      "bug_key": "OCPBUGS-80970",
+      "bug_summary": "ABI installs failing with nodes unable to pull ignition",
+      "component": "Machine Config Operator",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/openshift/baremetal_node_scenarios.yml",
+      "reasoning": "Partial match: scenarios/openshift/baremetal_node_scenarios.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "status": "open"
+    },
+    "OCPBUGS-81273_node_machine": {
+      "bug_key": "OCPBUGS-81273",
+      "bug_summary": "ImageID of pod is inconsistant, sometimes showing full digest and sometimes showing the crio imageId",
+      "component": "Node / CRI-O",
+      "confidence": 40,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Similar pattern in krkn docs (+15)",
+      "created_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine",
+      "status": "open"
+    },
+    "OCPBUGS-80988_node_machine": {
+      "bug_key": "OCPBUGS-80988",
+      "bug_summary": "ovnkube-upgrades-prepuller pods stuck in ContainerCreating during 4.19.17 to 4.19.25 upgrade on HCP MC, blocking network operator progression.",
+      "component": "Node / Kubelet",
+      "confidence": 50,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Similar pattern in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine",
+      "status": "open"
+    },
+    "OCPBUGS-79502_node_machine": {
+      "bug_key": "OCPBUGS-79502",
+      "bug_summary": "Hypershift e2e tests fail after AutoSizingReserved enabled",
+      "component": "Node / Kubelet",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine",
+      "status": "open"
+    },
+    "OCPBUGS-81628_networking": {
+      "bug_key": "OCPBUGS-81628",
+      "bug_summary": "openshift-ovn-kubernetes namespace don't have the permission to create RA for managed mode",
+      "component": "Networking / cluster-network-operator",
+      "confidence": 50,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Similar pattern in krkn docs (+15); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81530_networking": {
+      "bug_key": "OCPBUGS-81530",
+      "bug_summary": "Add extra line to the certificate creation to fix ongoing issue when configuring custom ingress certs",
+      "component": "Networking / router",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81442_networking": {
+      "bug_key": "OCPBUGS-81442",
+      "bug_summary": "e2e-aws-operator-techpreview failing TestUnsupportedConfigOverride/dynamic-config-manager after PR #1385",
+      "component": "Networking / router",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81281_networking": {
+      "bug_key": "OCPBUGS-81281",
+      "bug_summary": "Set Ceph noout Flag During SDN-to-OVN Migration to Prevent Unnecessary Recovery",
+      "component": "Networking / openshift-sdn",
+      "confidence": 25,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81272_networking": {
+      "bug_key": "OCPBUGS-81272",
+      "bug_summary": "VSphere e2e tests fail on HTTPRoute hostname",
+      "component": "Networking / router",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-81192_networking": {
+      "bug_key": "OCPBUGS-81192",
+      "bug_summary": "[E2E] TestUnmanagedDNSToManagedDNSInternalIngressController GCP flakes during internal\u2192external LB migration due to DNSReady race",
+      "component": "Networking / router",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-80966_networking": {
+      "bug_key": "OCPBUGS-80966",
+      "bug_summary": "Ingress operator produces malformed PEM bundle when tls.crt lacks trailing newline",
+      "component": "Networking / router",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-80960_networking": {
+      "bug_key": "OCPBUGS-80960",
+      "bug_summary": "OVN-Kubernetes: survivor local SB missing remote peer after same-name control-plane replace (east\u2013west broken)",
+      "component": "Networking / ovn-kubernetes",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    },
+    "OCPBUGS-80932_networking": {
+      "bug_key": "OCPBUGS-80932",
+      "bug_summary": "DCM: Router does not dynamically update static backend server",
+      "component": "Networking / router",
+      "confidence": 35,
+      "action_type": "github_issue",
+      "base_scenario": "scenarios/kind/scheduler.yml",
+      "reasoning": "Partial match: scenarios/kind/scheduler.yml (+25); Domain match (+10)",
+      "created_at": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "status": "open"
+    }
+  },
+  "actions": {},
+  "findings": [],
+  "runs": [
+    {
+      "timestamp": "2026-04-03T12:10:29.751995",
+      "agent": "control_plane",
+      "bugs_discovered": 0,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:10:29.994644",
+      "agent": "upgrade_lifecycle",
+      "bugs_discovered": 0,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:10:30.070034",
+      "agent": "node_machine",
+      "bugs_discovered": 0,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:10:30.152516",
+      "agent": "networking",
+      "bugs_discovered": 0,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:10:30.290166",
+      "agent": "storage",
+      "bugs_discovered": 0,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:10:30.388245",
+      "agent": "operators_platform",
+      "bugs_discovered": 0,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:11:52.745135",
+      "agent": "networking",
+      "bugs_discovered": 21,
+      "bugs_filtered_out": 10,
+      "bugs_matched": 0,
+      "gaps_found": 11,
+      "new_bugs": 21,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:11:52.851976",
+      "agent": "control_plane",
+      "bugs_discovered": 6,
+      "bugs_filtered_out": 5,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 6,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:11:52.873521",
+      "agent": "node_machine",
+      "bugs_discovered": 2,
+      "bugs_filtered_out": 2,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 2,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:11:53.457594",
+      "agent": "upgrade_lifecycle",
+      "bugs_discovered": 9,
+      "bugs_filtered_out": 5,
+      "bugs_matched": 0,
+      "gaps_found": 4,
+      "new_bugs": 9,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:11:54.114728",
+      "agent": "operators_platform",
+      "bugs_discovered": 9,
+      "bugs_filtered_out": 4,
+      "bugs_matched": 0,
+      "gaps_found": 5,
+      "new_bugs": 9,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:29:35.434471",
+      "agent": "control_plane",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 37,
+      "bugs_matched": 0,
+      "gaps_found": 3,
+      "new_bugs": 43,
+      "skipped_known": 7
+    },
+    {
+      "timestamp": "2026-04-03T12:29:37.303871",
+      "agent": "upgrade_lifecycle",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 35,
+      "bugs_matched": 0,
+      "gaps_found": 6,
+      "new_bugs": 41,
+      "skipped_known": 9
+    },
+    {
+      "timestamp": "2026-04-03T12:29:39.390257",
+      "agent": "node_machine",
+      "bugs_discovered": 10,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 5,
+      "gaps_found": 3,
+      "new_bugs": 8,
+      "skipped_known": 2
+    },
+    {
+      "timestamp": "2026-04-03T12:29:41.399819",
+      "agent": "networking",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 20,
+      "bugs_matched": 0,
+      "gaps_found": 9,
+      "new_bugs": 29,
+      "skipped_known": 21
+    },
+    {
+      "timestamp": "2026-04-03T12:29:42.244137",
+      "agent": "storage",
+      "bugs_discovered": 16,
+      "bugs_filtered_out": 16,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 16,
+      "skipped_known": 0
+    },
+    {
+      "timestamp": "2026-04-03T12:29:43.023502",
+      "agent": "operators_platform",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 41,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 41,
+      "skipped_known": 9
+    },
+    {
+      "timestamp": "2026-04-03T12:32:25.652952",
+      "agent": "control_plane",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 50
+    },
+    {
+      "timestamp": "2026-04-03T12:32:26.238065",
+      "agent": "upgrade_lifecycle",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 50
+    },
+    {
+      "timestamp": "2026-04-03T12:32:27.005684",
+      "agent": "node_machine",
+      "bugs_discovered": 10,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 10
+    },
+    {
+      "timestamp": "2026-04-03T12:32:27.334463",
+      "agent": "networking",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 50
+    },
+    {
+      "timestamp": "2026-04-03T12:32:28.110059",
+      "agent": "storage",
+      "bugs_discovered": 16,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 16
+    },
+    {
+      "timestamp": "2026-04-03T12:32:28.421212",
+      "agent": "operators_platform",
+      "bugs_discovered": 50,
+      "bugs_filtered_out": 0,
+      "bugs_matched": 0,
+      "gaps_found": 0,
+      "new_bugs": 0,
+      "skipped_known": 50
+    }
+  ]
+}

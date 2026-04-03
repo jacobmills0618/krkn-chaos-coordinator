@@ -46,6 +46,8 @@ class BaseDomainAgent(ABC):
         memory: MemoryStore | None = None,
         neo4j_store: Neo4jStore | None = None,
         use_llm_filter: bool = False,
+        max_bugs: int = 50,
+        days: int = 14,
     ):
         self.agent_name = agent_name
         self.jira = jira
@@ -57,6 +59,8 @@ class BaseDomainAgent(ABC):
         self.memory = memory or MemoryStore()
         self.neo4j = neo4j_store
         self.use_llm_filter = use_llm_filter
+        self.max_bugs = max_bugs
+        self.days = days
         self.components = get_components_for_agent(agent_name)
 
     def run(self) -> AgentResult:
@@ -124,7 +128,9 @@ class BaseDomainAgent(ABC):
 
     def _discover(self) -> list[Bug]:
         """DISCOVER: Query JIRA and Sippy for bugs and regressions."""
-        return self.jira.get_bugs_by_components(self.components)
+        return self.jira.get_bugs_by_components(
+            self.components, days=self.days, max_results=self.max_bugs
+        )
 
     def _filter(self, bugs: list[Bug]) -> tuple[list[FilterResult], list[FilterResult]]:
         """FILTER: Determine chaos relevance of each bug."""
