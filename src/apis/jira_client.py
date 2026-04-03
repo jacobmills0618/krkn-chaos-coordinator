@@ -39,7 +39,7 @@ class JiraClient:
 
     def _search(self, jql: str, max_results: int) -> list[Bug]:
         """Execute a JQL search and return Bug objects."""
-        url = f"{self._config.url}/rest/api/2/search"
+        url = f"{self._config.url}/rest/api/3/search/jql"
         params = {
             "jql": jql,
             "maxResults": max_results,
