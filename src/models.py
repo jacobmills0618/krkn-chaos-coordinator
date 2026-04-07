@@ -35,11 +35,12 @@ class Bug:
     key: str
     summary: str
     description: str
-    component: str
+    component: str  # Primary component (first listed)
     priority: str
     status: str
     created: str
     url: str
+    all_components: tuple[str, ...] = ()  # All components on this bug
 
 
 @dataclass(frozen=True)

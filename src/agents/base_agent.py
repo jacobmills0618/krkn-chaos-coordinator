@@ -66,11 +66,17 @@ class BaseDomainAgent(ABC):
         bugs = self._discover()
         logger.info("DISCOVER: found %d bugs", len(bugs))
 
-        # Skip already-analyzed bugs (Neo4j first, JSON fallback)
+        # Split into new vs known bugs
         known_keys = self._get_known_bugs()
         new_bugs = [b for b in bugs if b.key not in known_keys]
-        if len(bugs) != len(new_bugs):
-            logger.info("REMEMBER: skipping %d already-analyzed bugs", len(bugs) - len(new_bugs))
+        known_bugs = [b for b in bugs if b.key in known_keys]
+
+        if known_bugs:
+            logger.info("DISCOVER: %d known bugs — updating status in Neo4j", len(known_bugs))
+            self._update_known_bugs(known_bugs)
+
+        if new_bugs:
+            logger.info("DISCOVER: %d new bugs to analyze", len(new_bugs))
 
         # FILTER
         relevant, skipped = self._filter(new_bugs)
@@ -97,6 +103,14 @@ class BaseDomainAgent(ABC):
 
         logger.info("=== %s agent complete ===", self.agent_name)
         return result
+
+    def _update_known_bugs(self, known_bugs: list[Bug]) -> None:
+        """Update status/priority for already-analyzed bugs. Closes gaps for resolved bugs."""
+        if self.neo4j:
+            try:
+                self.neo4j.update_bug_statuses(known_bugs)
+            except Exception as e:
+                logger.warning("Failed to update known bug statuses: %s", e)
 
     def _get_known_bugs(self) -> set[str]:
         """Get already-analyzed bug keys from Neo4j or JSON memory."""
@@ -151,19 +165,26 @@ class BaseDomainAgent(ABC):
     def _find_scenario_match(self, bug: Bug, filter_result: FilterResult) -> ScenarioMatch:
         """Search for existing krkn scenarios that match a bug.
 
-        Uses ChromaDB for retrieval. If use_llm is True, LLM reasons over
-        the retrieved results. Otherwise, falls back to distance thresholds.
+        Uses ChromaDB for retrieval — searches per component separately for
+        multi-component bugs so results aren't diluted. If use_llm is True,
+        LLM reasons over the retrieved results.
         """
-        query_parts = [bug.component, bug.summary]
+        summary_parts = [bug.summary]
         if filter_result.failure_mode:
-            query_parts.append(filter_result.failure_mode)
+            summary_parts.append(filter_result.failure_mode)
         if filter_result.injection_method:
-            query_parts.append(filter_result.injection_method)
-        query = " ".join(query_parts)
+            summary_parts.append(filter_result.injection_method)
+        summary = " ".join(summary_parts)
 
-        # ChromaDB retrieval (same regardless of LLM mode)
-        scenario_hits = self.chroma.search_scenarios(query, n_results=5)
-        doc_hits = self.chroma.search_krkn_docs(query, n_results=5)
+        components = bug.all_components or (bug.component,)
+
+        # ChromaDB retrieval — per component, merged
+        scenario_hits = self.chroma.search_per_component(
+            components, summary, collection="scenarios", n_results=5,
+        )
+        doc_hits = self.chroma.search_per_component(
+            components, summary, collection="krkn_docs", n_results=5,
+        )
 
         if self.use_llm:
             from src.reasoning import llm_map_match
@@ -185,15 +206,23 @@ class BaseDomainAgent(ABC):
             bug = match.bug
 
             if self.use_llm:
-                # Gather context for LLM
-                doc_query = f"{bug.component} {bug.summary}"
-                ocp_docs = self.chroma.search_all(doc_query, n_results=3)
-                krkn_docs = self.chroma.search_krkn_docs(doc_query, n_results=3)
+                # Gather context for LLM — search per component
+                components = bug.all_components or (bug.component,)
+                ocp_docs = self.chroma.search_per_component(
+                    components, bug.summary, collection="all", n_results=5,
+                )
+                krkn_docs = self.chroma.search_per_component(
+                    components, bug.summary, collection="krkn_docs", n_results=3,
+                )
 
                 neo4j_history = []
                 if self.neo4j:
                     try:
-                        neo4j_history = self.neo4j.get_similar_resolved_bugs(bug.component)
+                        # Check history for ALL components
+                        for comp in components:
+                            neo4j_history.extend(
+                                self.neo4j.get_similar_resolved_bugs(comp)
+                            )
                     except Exception as e:
                         logger.warning("Neo4j history lookup failed: %s", e)
 

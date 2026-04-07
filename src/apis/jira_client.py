@@ -94,6 +94,17 @@ class JiraClient:
 
         return priority_bugs + backfill
 
+    def get_bugs_by_keys(self, keys: list[str], batch_size: int = 100) -> list[Bug]:
+        """Fetch bugs by their JIRA keys. Used for backfilling Neo4j data."""
+        all_bugs: list[Bug] = []
+        for i in range(0, len(keys), batch_size):
+            batch = keys[i : i + batch_size]
+            key_list = ", ".join(batch)
+            jql = f"key IN ({key_list})"
+            all_bugs.extend(self._search(jql, batch_size))
+            logger.info("Backfill: fetched %d/%d bugs", len(all_bugs), len(keys))
+        return all_bugs
+
     def _search(self, jql: str, max_results: int) -> list[Bug]:
         """Execute a JQL search with cursor-based pagination and return Bug objects.
 
@@ -130,7 +141,7 @@ class JiraClient:
             for issue in issues:
                 fields = issue["fields"]
                 components = fields.get("components", [])
-                component_name = components[0]["name"] if components else "Unknown"
+                component_names = tuple(c["name"] for c in components) if components else ("Unknown",)
 
                 description = fields.get("description", "") or ""
                 if isinstance(description, dict):
@@ -141,11 +152,12 @@ class JiraClient:
                         key=issue["key"],
                         summary=fields.get("summary", ""),
                         description=description,
-                        component=component_name,
+                        component=", ".join(component_names),
                         priority=fields.get("priority", {}).get("name", "Unknown"),
                         status=fields.get("status", {}).get("name", "Unknown"),
                         created=fields.get("created", ""),
                         url=f"{self._config.url}/browse/{issue['key']}",
+                        all_components=component_names,
                     )
                 )
 

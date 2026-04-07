@@ -70,6 +70,53 @@ class ChromaStore:
         results.sort(key=lambda r: r.get("distance", 1.0))
         return results[:n_results]
 
+    def search_per_component(
+        self,
+        components: tuple[str, ...] | list[str],
+        summary: str,
+        collection: str = "all",
+        n_results: int = 5,
+    ) -> list[dict]:
+        """Search per component separately, merge and deduplicate results.
+
+        For multi-component bugs, searches each component individually so
+        results aren't diluted by combining unrelated domains in one query.
+
+        Args:
+            components: Tuple of component names (from bug.all_components).
+            summary: Bug summary + optional failure mode context.
+            collection: Which collection to search — "all", "scenarios", "krkn_docs", "ocp_docs".
+            n_results: Max results to return after merge.
+        """
+        search_fn = {
+            "all": self.search_all,
+            "scenarios": self.search_scenarios,
+            "krkn_docs": self.search_krkn_docs,
+        }.get(collection, self.search_all)
+
+        if not components:
+            return search_fn(summary, n_results=n_results)
+
+        # Search per component, collect all hits
+        all_hits: list[dict] = []
+        per_component_n = max(3, n_results // len(components) + 1)
+
+        for comp in components:
+            query = f"{comp} {summary}"
+            hits = search_fn(query, n_results=per_component_n)
+            all_hits.extend(hits)
+
+        # Deduplicate by text content, keep best distance
+        seen: dict[str, dict] = {}
+        for hit in all_hits:
+            text = hit["text"]
+            if text not in seen or hit["distance"] < seen[text]["distance"]:
+                seen[text] = hit
+
+        # Sort by distance, return top n
+        merged = sorted(seen.values(), key=lambda h: h.get("distance", 1.0))
+        return merged[:n_results]
+
     def _add_chunks(
         self, collection: chromadb.Collection, chunks: list[DocChunk], prefix: str
     ) -> None:

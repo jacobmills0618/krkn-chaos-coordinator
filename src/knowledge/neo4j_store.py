@@ -84,27 +84,44 @@ class Neo4jStore:
 
             # Store bugs + components
             for bug in result.bugs_discovered:
+                # Truncate description to 2000 chars for Neo4j storage
+                desc = (bug.description or "")[:2000]
+                all_comps = list(bug.all_components) if bug.all_components else [bug.component]
+
                 r = session.run(
                     """
-                    MERGE (c:Component {name: $component})
                     MERGE (b:Bug {key: $key})
-                    ON CREATE SET b.summary = $summary, b.priority = $priority,
-                        b.status = $status, b.created = $created,
-                        b.first_seen = $ts, b.url = $url
-                    SET b.last_seen = $ts
-                    MERGE (c)-[:HAS_BUG]->(b)
+                    ON CREATE SET b.first_seen = $ts, b.created = $created
+                    SET b.last_seen = $ts, b.summary = $summary,
+                        b.priority = $priority, b.status = $status,
+                        b.url = $url, b.description = $description,
+                        b.all_components = $all_components
                     RETURN b.first_seen = $ts AS is_new
                     """,
-                    key=bug.key, summary=bug.summary, component=bug.component,
+                    key=bug.key, summary=bug.summary,
                     priority=bug.priority, status=bug.status,
                     created=bug.created, url=bug.url, ts=timestamp,
+                    description=desc, all_components=all_comps,
                 )
                 record = r.single()
                 if record and record["is_new"]:
                     new_bugs += 1
 
-            # Store filter decisions
+                # Link bug to ALL components (not just primary)
+                for comp_name in all_comps:
+                    session.run(
+                        """
+                        MERGE (c:Component {name: $component})
+                        MERGE (b:Bug {key: $key})
+                        MERGE (c)-[:HAS_BUG]->(b)
+                        """,
+                        component=comp_name, key=bug.key,
+                    )
+
+            # Store filter decisions — mark skipped bugs
+            filtered_out_keys = set()
             for fr in result.bugs_filtered_out:
+                filtered_out_keys.add(fr.bug.key)
                 session.run(
                     """
                     MERGE (b:Bug {key: $key})
@@ -112,6 +129,17 @@ class Neo4jStore:
                     """,
                     key=fr.bug.key, reason=fr.skip_reason,
                 )
+
+            # Mark chaos-relevant bugs (passed filter)
+            for bug in result.bugs_discovered:
+                if bug.key not in filtered_out_keys:
+                    session.run(
+                        """
+                        MERGE (b:Bug {key: $key})
+                        SET b.chaos_relevant = true
+                        """,
+                        key=bug.key,
+                    )
 
             # Store gaps
             for gap in result.gaps:
@@ -260,6 +288,114 @@ class Neo4jStore:
                 limit=limit,
             )
             return [dict(record) for record in r]
+
+    RESOLVED_STATUSES = frozenset({
+        "Closed", "Verified", "Release Pending", "ON_QA", "MODIFIED",
+    })
+
+    def update_bug_statuses(self, bugs: list) -> dict:
+        """Update status/priority for known bugs and close gaps for resolved bugs.
+
+        Called during DISCOVER for bugs already in Neo4j. Zero LLM cost.
+        """
+        timestamp = datetime.now(timezone.utc).isoformat()
+        updated = 0
+        gaps_closed = 0
+
+        with self._driver.session() as session:
+            for bug in bugs:
+                desc = (bug.description or "")[:2000]
+                all_comps = list(bug.all_components) if bug.all_components else [bug.component]
+
+                session.run(
+                    """
+                    MATCH (b:Bug {key: $key})
+                    SET b.status = $status, b.priority = $priority,
+                        b.last_seen = $ts, b.description = $description,
+                        b.all_components = $all_components
+                    """,
+                    key=bug.key, status=bug.status, priority=bug.priority,
+                    ts=timestamp, description=desc, all_components=all_comps,
+                )
+                updated += 1
+
+                # Close open gaps if bug is resolved
+                if bug.status in self.RESOLVED_STATUSES:
+                    r = session.run(
+                        """
+                        MATCH (b:Bug {key: $key})-[:HAS_GAP]->(g:Gap {status: 'open'})
+                        SET g.status = 'resolved_upstream',
+                            g.resolved_at = $ts,
+                            g.resolve_reason = 'Bug resolved in JIRA'
+                        RETURN count(g) AS closed
+                        """,
+                        key=bug.key, ts=timestamp,
+                    )
+                    record = r.single()
+                    if record and record["closed"] > 0:
+                        gaps_closed += record["closed"]
+                        logger.info(
+                            "Gap auto-closed: %s resolved in JIRA (%s)",
+                            bug.key, bug.status,
+                        )
+
+        logger.info("Status update: %d bugs updated, %d gaps auto-closed", updated, gaps_closed)
+        return {"updated": updated, "gaps_closed": gaps_closed}
+
+    def get_bugs_missing_description(self) -> list[str]:
+        """Get bug keys that have no description stored."""
+        with self._driver.session() as session:
+            r = session.run(
+                """
+                MATCH (b:Bug)
+                WHERE b.description IS NULL OR b.all_components IS NULL
+                RETURN b.key AS key
+                """
+            )
+            return [record["key"] for record in r]
+
+    def backfill_bugs(self, bugs: list) -> dict:
+        """Update existing Bug nodes with fresh data from JIRA.
+
+        Used to fill in description and all_components for bugs
+        that were stored before those fields were tracked.
+        """
+        from datetime import datetime, timezone
+        timestamp = datetime.now(timezone.utc).isoformat()
+        updated = 0
+
+        with self._driver.session() as session:
+            for bug in bugs:
+                desc = (bug.description or "")[:2000]
+                all_comps = list(bug.all_components) if bug.all_components else [bug.component]
+
+                session.run(
+                    """
+                    MATCH (b:Bug {key: $key})
+                    SET b.summary = $summary, b.description = $description,
+                        b.all_components = $all_components,
+                        b.priority = $priority, b.status = $status,
+                        b.last_seen = $ts
+                    """,
+                    key=bug.key, summary=bug.summary,
+                    description=desc, all_components=all_comps,
+                    priority=bug.priority, status=bug.status, ts=timestamp,
+                )
+
+                # Ensure component relationships exist for all components
+                for comp_name in all_comps:
+                    session.run(
+                        """
+                        MERGE (c:Component {name: $component})
+                        MERGE (b:Bug {key: $key})
+                        MERGE (c)-[:HAS_BUG]->(b)
+                        """,
+                        component=comp_name, key=bug.key,
+                    )
+                updated += 1
+
+        logger.info("Backfill: updated %d bugs", updated)
+        return {"updated": updated}
 
     def close(self) -> None:
         if self._driver:
