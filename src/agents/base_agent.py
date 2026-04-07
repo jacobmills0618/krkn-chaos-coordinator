@@ -66,6 +66,9 @@ class BaseDomainAgent(ABC):
         bugs = self._discover()
         logger.info("DISCOVER: found %d bugs", len(bugs))
 
+        # Enrich with z-stream changelog data
+        bugs = self._enrich_with_changelog(bugs)
+
         # Split into new vs known bugs
         known_keys = self._get_known_bugs()
         new_bugs = [b for b in bugs if b.key not in known_keys]
@@ -104,6 +107,44 @@ class BaseDomainAgent(ABC):
         logger.info("=== %s agent complete ===", self.agent_name)
         return result
 
+    def _enrich_with_changelog(self, bugs: list[Bug]) -> list[Bug]:
+        """Enrich bugs with z-stream fix info from release changelogs."""
+        try:
+            from src.apis.release_client import get_all_fixed_bugs
+            fixed_map = get_all_fixed_bugs(self.release)
+        except Exception as e:
+            logger.warning("Changelog enrichment failed: %s", e)
+            return bugs
+
+        if not fixed_map:
+            return bugs
+
+        enriched = []
+        fixed_count = 0
+        for bug in bugs:
+            bug_fix = fixed_map.get(bug.key)
+            if bug_fix:
+                bug = Bug(
+                    key=bug.key,
+                    summary=bug.summary,
+                    description=bug.description,
+                    component=bug.component,
+                    priority=bug.priority,
+                    status=bug.status,
+                    created=bug.created,
+                    url=bug.url,
+                    all_components=bug.all_components,
+                    fixed_in_release=bug_fix.fixed_in,
+                    fix_commits=bug_fix.commits,
+                    fix_image=bug_fix.image,
+                )
+                fixed_count += 1
+            enriched.append(bug)
+
+        if fixed_count:
+            logger.info("DISCOVER: %d bugs already fixed in z-streams", fixed_count)
+        return enriched
+
     def _update_known_bugs(self, known_bugs: list[Bug]) -> None:
         """Update status/priority for already-analyzed bugs. Closes gaps for resolved bugs."""
         if self.neo4j:
@@ -137,7 +178,8 @@ class BaseDomainAgent(ABC):
     def _discover(self) -> list[Bug]:
         """DISCOVER: Query JIRA and Sippy for bugs and regressions."""
         return self.jira.get_bugs_by_components(
-            self.components, days=self.days, max_results=self.max_bugs
+            self.components, days=self.days, max_results=self.max_bugs,
+            release=self.release,
         )
 
     def _filter(self, bugs: list[Bug]) -> tuple[list[FilterResult], list[FilterResult]]:

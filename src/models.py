@@ -35,12 +35,15 @@ class Bug:
     key: str
     summary: str
     description: str
-    component: str  # Primary component (first listed)
+    component: str  # All components joined with comma
     priority: str
     status: str
     created: str
     url: str
-    all_components: tuple[str, ...] = ()  # All components on this bug
+    all_components: tuple[str, ...] = ()  # Tuple for iteration
+    fixed_in_release: str | None = None  # e.g. "4.21.6" if shipped in a z-stream
+    fix_commits: tuple[str, ...] = ()    # Commit messages that fixed this bug
+    fix_image: str | None = None         # Image that was updated (e.g. "machine-config-operator")
 
 
 @dataclass(frozen=True)

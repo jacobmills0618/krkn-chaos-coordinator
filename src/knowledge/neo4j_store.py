@@ -95,13 +95,19 @@ class Neo4jStore:
                     SET b.last_seen = $ts, b.summary = $summary,
                         b.priority = $priority, b.status = $status,
                         b.url = $url, b.description = $description,
-                        b.all_components = $all_components
+                        b.all_components = $all_components,
+                        b.fixed_in_release = $fixed_in_release,
+                        b.fix_image = $fix_image,
+                        b.fix_commits = $fix_commits
                     RETURN b.first_seen = $ts AS is_new
                     """,
                     key=bug.key, summary=bug.summary,
                     priority=bug.priority, status=bug.status,
                     created=bug.created, url=bug.url, ts=timestamp,
                     description=desc, all_components=all_comps,
+                    fixed_in_release=bug.fixed_in_release,
+                    fix_image=bug.fix_image,
+                    fix_commits=list(bug.fix_commits) if bug.fix_commits else [],
                 )
                 record = r.single()
                 if record and record["is_new"]:

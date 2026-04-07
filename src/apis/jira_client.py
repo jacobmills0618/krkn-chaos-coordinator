@@ -56,26 +56,36 @@ class JiraClient:
         days: int = 14,
         max_results: int = 2000,
         priority_filter: bool = True,
+        release: str | None = None,
     ) -> list[Bug]:
         """Query OCPBUGS for recent bugs in the given components.
 
         When priority_filter is True, fetches Critical/Major/Blocker bugs first,
         then backfills with remaining bugs up to max_results.
+        When release is set (e.g. "4.21"), filters by affectedVersion.
         """
         component_list = ", ".join(f'"{c}"' for c in components)
+        if release:
+            # Match all version variants: 4.21, 4.21.0, 4.21.z
+            version_variants = f'"{release}", "{release}.0", "{release}.z"'
+            version_clause = f" AND affectedVersion IN ({version_variants})"
+        else:
+            version_clause = ""
 
         if not priority_filter:
             jql = (
-                f"project = OCPBUGS AND component IN ({component_list}) "
-                f"AND created >= -{days}d ORDER BY created DESC"
+                f"project = OCPBUGS AND component IN ({component_list})"
+                f"{version_clause}"
+                f" AND created >= -{days}d ORDER BY created DESC"
             )
             return self._search(jql, max_results)
 
         # Priority bugs first
         priority_jql = (
-            f"project = OCPBUGS AND component IN ({component_list}) "
-            f"AND priority IN (Blocker, Critical, Major) "
-            f"AND created >= -{days}d ORDER BY priority ASC, created DESC"
+            f"project = OCPBUGS AND component IN ({component_list})"
+            f"{version_clause}"
+            f" AND priority IN (Blocker, Critical, Major)"
+            f" AND created >= -{days}d ORDER BY priority ASC, created DESC"
         )
         priority_bugs = self._search(priority_jql, max_results)
 
@@ -86,8 +96,9 @@ class JiraClient:
         seen_keys = {b.key for b in priority_bugs}
         remaining = max_results - len(priority_bugs)
         all_jql = (
-            f"project = OCPBUGS AND component IN ({component_list}) "
-            f"AND created >= -{days}d ORDER BY created DESC"
+            f"project = OCPBUGS AND component IN ({component_list})"
+            f"{version_clause}"
+            f" AND created >= -{days}d ORDER BY created DESC"
         )
         all_bugs = self._search(all_jql, max_results)
         backfill = [b for b in all_bugs if b.key not in seen_keys][:remaining]

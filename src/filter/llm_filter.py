@@ -114,6 +114,15 @@ def llm_filter_bug(bug: Bug, config: LLMBackendConfig | None = None) -> FilterRe
         from src.filter.chaos_filter import filter_bug
         return filter_bug(bug)
 
+    if bug.fixed_in_release:
+        commit_detail = ""
+        if bug.fix_commits:
+            commit_lines = "\n".join(f"  - {c}" for c in bug.fix_commits[:5])
+            commit_detail = f"\nFix commits ({bug.fix_image or 'unknown'}):\n{commit_lines}"
+        fix_info = f"\nFixed in release: {bug.fixed_in_release} (chaos test still valuable for regression prevention and older z-streams){commit_detail}"
+    else:
+        fix_info = "\nNot yet fixed in any z-stream release."
+
     prompt = f"""Analyze this OpenShift bug for chaos test relevance:
 
 Bug Key: {bug.key}
@@ -121,6 +130,7 @@ Component: {bug.component}
 Priority: {bug.priority}
 Summary: {bug.summary}
 Description: {bug.description[:1500] if bug.description else 'No description'}
+{fix_info}
 
 Is this bug chaos-relevant? Respond with JSON only."""
 

@@ -77,11 +77,21 @@ def llm_map_match(
         hit["text"][:300] for hit in doc_hits[:3]
     ) or "No relevant documentation found."
 
+    if bug.fixed_in_release:
+        commit_detail = ""
+        if bug.fix_commits:
+            commit_lines = "; ".join(bug.fix_commits[:3])
+            commit_detail = f" Fix: {commit_lines}"
+        fix_info = f"Fixed in {bug.fixed_in_release} ({bug.fix_image or 'unknown'}).{commit_detail}"
+    else:
+        fix_info = "Not yet fixed in any z-stream."
+
     prompt = f"""Bug: {bug.key}
 Component: {bug.component}
 Summary: {bug.summary}
 Failure Mode: {filter_result.failure_mode or 'unknown'}
 Injection Method: {filter_result.injection_method or 'unknown'}
+Release Status: {fix_info}
 Description: {bug.description[:800] if bug.description else 'No description'}
 
 Existing krkn scenarios (from search):
@@ -238,9 +248,19 @@ def llm_analyze_gap(
 
     scenario_context = f"Closest scenario: {match.matched_scenario}" if match.matched_scenario else "No matching scenario found."
 
+    if bug.fixed_in_release:
+        commit_detail = ""
+        if bug.fix_commits:
+            commit_lines = "\n".join(f"  - {c}" for c in bug.fix_commits[:5])
+            commit_detail = f"\nFix commits ({bug.fix_image or 'unknown'}):\n{commit_lines}"
+        fix_info = f"Fixed in {bug.fixed_in_release}.{commit_detail}\nChaos test is still valuable for regression prevention — the fix could regress in future z-streams."
+    else:
+        fix_info = "Not yet fixed in any z-stream. Active gap — high priority."
+
     prompt = f"""Bug: {bug.key}
 Component: {bug.component}
 Summary: {bug.summary}
+Release Status: {fix_info}
 Description: {bug.description[:1000] if bug.description else 'No description'}
 
 Match result: {match.match_result.value}
