@@ -101,10 +101,22 @@ def call_llm(messages: list[dict], config: LLMBackendConfig) -> str:
     raise ValueError(f"Unsupported LLM provider: {config.provider}")
 
 
-def llm_filter_bug(bug: Bug, config: LLMBackendConfig | None = None) -> FilterResult:
+def llm_filter_bug(
+    bug: Bug,
+    config: LLMBackendConfig | None = None,
+    ocp_docs: list[dict] | None = None,
+    krkn_docs: list[dict] | None = None,
+) -> FilterResult:
     """Use LLM to determine if a bug is chaos-relevant.
 
-    Auto-detects the best available LLM backend if config not provided.
+    Args:
+        bug: The bug to filter.
+        config: LLM backend config. Auto-detected if None.
+        ocp_docs: OCP architecture docs from ChromaDB (per-component search).
+            When provided, the LLM understands component internals.
+        krkn_docs: krkn plugin/scenario docs from ChromaDB.
+            When provided, the LLM knows what krkn can actually inject.
+
     Falls back to the keyword filter if LLM fails.
     """
     if config is None:
@@ -123,6 +135,19 @@ def llm_filter_bug(bug: Bug, config: LLMBackendConfig | None = None) -> FilterRe
     else:
         fix_info = "\nNot yet fixed in any z-stream release."
 
+    # Build context sections from ChromaDB
+    if ocp_docs:
+        doc_text = "\n---\n".join(hit["text"][:300] for hit in ocp_docs[:3])
+        ocp_section = f"\nOpenShift component architecture (from docs):\n{doc_text}\n"
+    else:
+        ocp_section = ""
+
+    if krkn_docs:
+        krkn_text = "\n---\n".join(hit["text"][:300] for hit in krkn_docs[:3])
+        krkn_section = f"\nAvailable krkn chaos scenarios for this component:\n{krkn_text}\n"
+    else:
+        krkn_section = ""
+
     prompt = f"""Analyze this OpenShift bug for chaos test relevance:
 
 Bug Key: {bug.key}
@@ -131,7 +156,7 @@ Priority: {bug.priority}
 Summary: {bug.summary}
 Description: {bug.description[:1500] if bug.description else 'No description'}
 {fix_info}
-
+{ocp_section}{krkn_section}
 Is this bug chaos-relevant? Respond with JSON only."""
 
     try:

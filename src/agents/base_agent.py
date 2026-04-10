@@ -185,9 +185,44 @@ class BaseDomainAgent(ABC):
     def _filter(self, bugs: list[Bug]) -> tuple[list[FilterResult], list[FilterResult]]:
         """FILTER: Determine chaos relevance of each bug."""
         if self.use_llm:
-            logger.info("Using LLM-enhanced filter (Ollama)")
-            return llm_filter_bugs(bugs)
+            logger.info("Using LLM-enhanced filter with ChromaDB context")
+            return self._llm_filter_with_docs(bugs)
         return filter_bugs(bugs)
+
+    def _llm_filter_with_docs(
+        self, bugs: list[Bug],
+    ) -> tuple[list[FilterResult], list[FilterResult]]:
+        """LLM filter enriched with per-component OCP docs from ChromaDB."""
+        from src.filter.llm_filter import llm_filter_bug
+        from src.filter.llm_config import detect_llm_backend
+
+        config = detect_llm_backend()
+        relevant = []
+        skipped = []
+
+        for i, bug in enumerate(bugs):
+            logger.info("LLM filtering %d/%d: %s", i + 1, len(bugs), bug.key)
+
+            # Search ChromaDB for component architecture docs + krkn capabilities
+            components = bug.all_components or (bug.component,)
+            ocp_docs = self.chroma.search_per_component(
+                components, bug.summary, collection="all", n_results=3,
+            )
+            krkn_docs = self.chroma.search_per_component(
+                components, bug.summary, collection="krkn_docs", n_results=3,
+            )
+
+            result = llm_filter_bug(bug, config=config, ocp_docs=ocp_docs, krkn_docs=krkn_docs)
+
+            if result.chaos_relevant:
+                relevant.append(result)
+                logger.info("  PASS: %s (%s)", result.failure_mode, result.injection_method)
+            else:
+                skipped.append(result)
+                logger.info("  SKIP: %s", result.skip_reason)
+
+        logger.info("LLM filter: %d relevant, %d skipped", len(relevant), len(skipped))
+        return relevant, skipped
 
     def _map(self, relevant: list[FilterResult]) -> tuple[list[ScenarioMatch], list[ScenarioMatch]]:
         """MAP: Match bugs against existing krkn scenarios using ChromaDB + local index."""
