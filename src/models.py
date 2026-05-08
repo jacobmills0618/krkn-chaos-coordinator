@@ -98,6 +98,59 @@ class AgentResult:
     errors: list[str] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class Observation:
+    """Structured result from a tool call — status, summary, and next actions."""
+    status: str            # "success" | "warning" | "error"
+    summary: str           # One-line human-readable result
+    next_actions: tuple[str, ...] = ()  # What the pipeline should do next
+    artifacts: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FilterContext:
+    """Bundled inputs for the FILTER LLM call."""
+    ocp_docs: tuple[dict, ...] = ()
+    krkn_docs: tuple[dict, ...] = ()
+
+
+@dataclass(frozen=True)
+class MapContext:
+    """Bundled inputs for the MAP LLM call."""
+    scenario_hits: tuple[dict, ...] = ()
+    doc_hits: tuple[dict, ...] = ()
+    kb_context: dict | None = None
+
+
+@dataclass(frozen=True)
+class AnalyzeContext:
+    """Bundled inputs for the ANALYZE LLM call."""
+    ocp_docs: tuple[dict, ...] = ()
+    krkn_docs: tuple[dict, ...] = ()
+    neo4j_history: tuple[dict, ...] = ()
+
+
+@dataclass
+class RunMetrics:
+    """Per-run metrics for harness quality tracking."""
+    bugs_processed: int = 0
+    bugs_succeeded: int = 0
+    filter_retries: int = 0
+    filter_escalations: int = 0
+    map_fallbacks: int = 0
+    analyze_retries: int = 0
+    total_input_tokens: int = 0
+    total_output_tokens: int = 0
+    keyword_filter_hits: int = 0
+    semantic_cache_hits: int = 0
+    llm_filter_calls: int = 0
+    llm_map_calls: int = 0
+    llm_analyze_calls: int = 0
+    filter_duration_sec: float = 0.0
+    map_duration_sec: float = 0.0
+    analyze_duration_sec: float = 0.0
+
+
 class MemoryRepository(Protocol):
     """Protocol for memory backends (Neo4j, in-memory, etc.)."""
 
