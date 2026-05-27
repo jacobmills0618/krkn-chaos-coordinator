@@ -4,7 +4,7 @@ Supports multiple LLM backends. Set via environment variable or .env file.
 Falls back to keyword filter if no LLM is configured.
 
 Environment variables:
-  LLM_PROVIDER=ollama|anthropic|openai|google|none
+  LLM_PROVIDER=claude_code|ollama|anthropic|openai|google|none
   LLM_MODEL=qwen2.5-coder:14b  (or claude-sonnet-4-6, gpt-4o, gemini-2.5-pro, etc.)
 
   # Per-phase model routing (optional — falls back to LLM_PROVIDER/LLM_MODEL):
@@ -31,11 +31,12 @@ logger = logging.getLogger(__name__)
 
 
 class LLMProvider(Enum):
-    NONE = "none"          # Keyword filter only
-    OLLAMA = "ollama"      # Local Ollama (default when available)
-    ANTHROPIC = "anthropic"  # Claude API
-    OPENAI = "openai"      # OpenAI API
-    GOOGLE = "google"      # Google Gemini API
+    NONE = "none"            # Keyword filter only
+    CLAUDE_CODE = "claude_code"  # Claude Code CLI (uses existing subscription)
+    OLLAMA = "ollama"        # Local Ollama (default when available)
+    ANTHROPIC = "anthropic"  # Claude API (requires ANTHROPIC_API_KEY)
+    OPENAI = "openai"        # OpenAI API
+    GOOGLE = "google"        # Google Gemini API
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,15 @@ class LLMBackendConfig:
     model: str
     api_key: str | None = None
     base_url: str | None = None
+
+
+def _claude_code_available() -> bool:
+    """Check if claude CLI is installed and responsive."""
+    try:
+        import shutil
+        return shutil.which("claude") is not None
+    except Exception:
+        return False
 
 
 _PHASE_ENV_PREFIXES: dict[str, str] = {
@@ -85,9 +95,16 @@ def detect_llm_backend(phase: str = "default") -> LLMBackendConfig:
                (e.g. LLM_FILTER_PROVIDER / LLM_FILTER_MODEL).
                "default" uses global config only.
 
-    Priority: explicit provider > Anthropic key > OpenAI key > Google key > Ollama > none
+    Priority: explicit > claude_code > Anthropic key > OpenAI key > Google key > Ollama > none
     """
     explicit, phase_model = _resolve_provider_and_model(phase)
+
+    if explicit == "claude_code" or (not explicit and _claude_code_available()):
+        model = phase_model or "claude-sonnet-4-6"
+        logger.info("LLM backend [%s]: Claude Code CLI (%s)", phase, model)
+        return LLMBackendConfig(
+            provider=LLMProvider.CLAUDE_CODE, model=model,
+        )
 
     if explicit == "anthropic" or (not explicit and os.environ.get("ANTHROPIC_API_KEY")):
         model = phase_model or "claude-sonnet-4-6"

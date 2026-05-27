@@ -66,7 +66,27 @@ def call_llm(
             Non-Anthropic providers fall back to including the system message
             in the messages list.
     """
-    if config.provider == LLMProvider.OLLAMA:
+    if config.provider == LLMProvider.CLAUDE_CODE:
+        import subprocess
+
+        effective_messages = _prepend_system_message(messages, system_prompt)
+        prompt_parts = []
+        for msg in effective_messages:
+            if msg["role"] == "system":
+                prompt_parts.append(msg["content"])
+            elif msg["role"] == "user":
+                prompt_parts.append(msg["content"])
+        full_prompt = "\n\n".join(prompt_parts)
+
+        result = subprocess.run(
+            ["claude", "-p", full_prompt, "--model", config.model, "--output-format", "text"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"Claude Code CLI failed: {result.stderr[:200]}")
+        return result.stdout.strip()
+
+    elif config.provider == LLMProvider.OLLAMA:
         import ollama
 
         # For non-Anthropic providers, prepend system_prompt as a message

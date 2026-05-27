@@ -148,6 +148,7 @@ class TestFallback:
     def test_no_config_returns_none_provider(self) -> None:
         """No env vars at all should yield NONE provider."""
         with patch.dict(os.environ, _clean_llm_env(), clear=True), \
+             patch("src.filter.llm_config._claude_code_available", return_value=False), \
              patch("urllib.request.urlopen", side_effect=Exception("no ollama")):
             cfg = detect_llm_backend(phase="filter")
 

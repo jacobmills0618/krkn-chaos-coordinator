@@ -50,6 +50,10 @@ def main():
         "--days", type=int, default=14, help="Look back N days for bugs (default: 14)"
     )
     parser.add_argument(
+        "--use-llm", action="store_true", default=False,
+        help="Enable LLM-enhanced filter/map/analyze (uses tiered model routing)",
+    )
+    parser.add_argument(
         "--krkn-repo", default=str(Path.home() / "krkn"), help="Path to local krkn repo"
     )
     args = parser.parse_args()
@@ -96,6 +100,7 @@ def main():
         "scenarios": scenarios,
         "release": args.release,
         "neo4j_store": neo4j_store,
+        "use_llm": args.use_llm,
     }
 
     if args.agent:

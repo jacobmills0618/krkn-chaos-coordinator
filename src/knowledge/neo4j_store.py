@@ -3,6 +3,8 @@
 Uses the synchronous Neo4j driver. No LLM needed.
 5ms per write instead of 30 seconds with Graphiti.
 """
+from __future__ import annotations
+
 
 import logging
 import os
