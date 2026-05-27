@@ -25,7 +25,7 @@ def run_filter_eval(
     bugs: list[Bug],
     baseline_model: str = "claude-opus-4-6",
     candidate_model: str = "claude-sonnet-4-6",
-    provider: str = "anthropic",
+    provider: str = "claude_code",
 ) -> EvalReport:
     """Run FILTER on same bugs with two models, compare results.
 
@@ -38,7 +38,7 @@ def run_filter_eval(
         bugs: List of Bug objects to classify.
         baseline_model: Model name for the baseline (ground truth).
         candidate_model: Model name for the candidate being evaluated.
-        provider: LLM provider name (anthropic, openai, google, ollama).
+        provider: LLM provider name (claude_code, anthropic, openai, google, ollama).
 
     Returns:
         EvalReport with agreement metrics and disagreement details.
@@ -146,8 +146,8 @@ def main() -> None:
     parser.add_argument(
         "--provider",
         type=str,
-        default="anthropic",
-        help="LLM provider (default: anthropic)",
+        default="claude_code",
+        help="LLM provider (default: claude_code)",
     )
     parser.add_argument(
         "--memory-path",
