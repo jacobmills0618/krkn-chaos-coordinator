@@ -1,6 +1,6 @@
 ---
 description: Run krkn-chaos-coordinator scan — optionally pass a question or filter (e.g. "/run-scan what etcd coverage do we have?")
-allowed-tools: Bash, Read, Write, mcp__jira__searchJiraIssuesUsingJql, mcp__github__create_issue
+allowed-tools: Bash, Read, Write, AskUserQuestion, mcp__jira__searchJiraIssuesUsingJql, mcp__github__create_issue
 ---
 
 # krkn-chaos-coordinator — Scan
@@ -15,15 +15,15 @@ $ARGUMENTS
 
 ## Mode Selection
 
-If the user query above is empty or blank, run the **Full Scan** (all steps below).
+If the user query above is empty or blank, run in **Interactive Mode** — ask the questions below, then run the full scan.
 
 If the user query is NOT empty, run in **Targeted Query** mode:
 - Parse what the user is asking about (component, bug, scenario, coverage area)
-- Skip to the relevant steps below — you don't need to pull all 50 bugs if they only care about etcd
-- Use ChromaDB, Neo4j, and JIRA as needed to answer their specific question
+- Skip the interactive questions — infer version and agent from context
+- Skip to the relevant steps below
 - Still be thorough: search scenarios, check docs, reason about gaps
 
-**Example targeted queries and how to handle them:**
+**Example targeted queries:**
 - "what etcd bugs and coverage do we have" → Search JIRA for etcd component bugs + search ChromaDB for etcd scenarios + report gaps
 - "does krkn cover OVN pod failures" → Search scenarios for OVN, read the YAML files, report what's covered vs missing
 - "analyze OCPBUGS-12345" → Pull that specific bug, run FILTER/MAP/ANALYZE on just that bug
@@ -31,7 +31,49 @@ If the user query is NOT empty, run in **Targeted Query** mode:
 - "show me all hog scenarios" → Search ChromaDB/krkn docs for hog scenario plugins and list them
 - "what components have the most open gaps" → Query Neo4j gap counts
 
-## Step 1: DISCOVER
+## Interactive Setup (Full Scan only)
+
+Before running the pipeline, ask the user two questions using AskUserQuestion:
+
+**Question 1 — OCP Version:**
+Ask: "Which OpenShift version do you want to scan?"
+Options:
+- 4.19
+- 4.20
+- 4.21
+- 4.22
+
+**Question 2 — Agent Scope:**
+Ask: "Which domain agent(s) should run?"
+Options (multiSelect: true):
+- control_plane — Etcd, API Server, Scheduler, HyperShift
+- networking — OVN, DNS, Ingress, SR-IOV, MetalLB
+- node_machine — Kubelet, CRI-O, Machine API, Bare Metal
+- storage — CSI, Local Storage, Image Registry, LVMS
+- operators_platform — OLM, Console, Monitoring, Auth, Cloud Compute
+- upgrade_lifecycle — CVO, MCO, Installer variants
+
+Use the selected version as `--release` and selected agents to determine which to run.
+
+After getting answers, run:
+
+```bash
+cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 src/main.py \
+  --release <VERSION> \
+  --agent <AGENT_NAME> \
+  --use-llm \
+  --max-bugs 50 \
+  --days 14
+```
+
+If user selected multiple agents, run them sequentially and combine results.
+If user selected all agents, omit `--agent` flag to run all.
+
+After the pipeline completes, present the results summary and approval queue.
+
+## Pipeline Steps (Reference — for Targeted Query mode)
+
+### Step 1: DISCOVER
 
 Pull recent bugs from JIRA (skip or narrow if in Targeted Query mode):
 
@@ -44,7 +86,7 @@ mcp__jira__searchJiraIssuesUsingJql with:
   responseContentFormat: markdown
 ```
 
-## Step 2: FILTER (Claude reasoning + ChromaDB)
+### Step 2: FILTER (Claude reasoning + ChromaDB)
 
 For EACH bug, do these steps — don't batch, actually reason per bug:
 
@@ -52,7 +94,7 @@ For EACH bug, do these steps — don't batch, actually reason per bug:
 
 **2b. Search OCP docs** for component context:
 ```bash
-cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. ./venv/bin/python3 -c "
+cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.knowledge.chromadb_store import ChromaStore
 c = ChromaStore(persist_dir='./chroma_data')
 for r in c.search_all('PUT_COMPONENT_AND_SUMMARY_HERE', n_results=3):
@@ -74,12 +116,12 @@ PASS: OCPBUGS-XXXXX — [failure mode] (injection: [method])
 SKIP: OCPBUGS-XXXXX — [reason]
 ```
 
-## Step 3: MAP (Claude reads actual scenarios)
+### Step 3: MAP (Claude reads actual scenarios)
 
 For each PASS bug, find existing krkn scenarios:
 
 ```bash
-PYTHONPATH=. ./venv/bin/python3 -c "
+PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.knowledge.chromadb_store import ChromaStore
 c = ChromaStore(persist_dir='./chroma_data')
 print('=== Matching scenarios ===')
@@ -104,13 +146,13 @@ Decision:
 - **PARTIAL MATCH**: Same component, different failure → extend it
 - **NO MATCH**: Nothing covers this → new scenario needed
 
-## Step 4: ANALYZE (Claude reasons about each gap)
+### Step 4: ANALYZE (Claude reasons about each gap)
 
 For each gap (PARTIAL or NO MATCH), reason deeply:
 
 **4a. What krkn plugins are available?**
 ```bash
-PYTHONPATH=. ./venv/bin/python3 -c "
+PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.knowledge.chromadb_store import ChromaStore
 c = ChromaStore(persist_dir='./chroma_data')
 for r in c.search_krkn_docs('PUT_FAILURE_MODE_HERE', n_results=3):
@@ -121,7 +163,7 @@ for r in c.search_krkn_docs('PUT_FAILURE_MODE_HERE', n_results=3):
 
 **4b. Check Neo4j for similar resolved bugs:**
 ```bash
-PYTHONPATH=. ./venv/bin/python3 -c "
+PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.knowledge.neo4j_store import Neo4jStore
 n = Neo4jStore(); n.connect()
 for s in n.get_similar_resolved_bugs('PUT_COMPONENT_NAME'):
@@ -154,11 +196,9 @@ Extend scenarios/openshift/etcd.yml:
   oc get co/etcd -o jsonpath='{.status.conditions}'
 - Assert: etcd should NOT report Degraded=True while members
   are actually healthy (etcdctl endpoint health shows true)
-- This reproduces OCPBUGS-81323 where the 30s health check
-  timeout is exceeded under API server load
 ```
 
-## Step 5: ACT
+### Step 5: ACT
 
 Present each gap to the user:
 
@@ -182,11 +222,11 @@ Recommendation:
 
 When approved, create GitHub issue on `shahsahil264/krkn` with the full analysis.
 
-## Step 6: REMEMBER
+### Step 6: REMEMBER
 
 Store results in Neo4j:
 ```bash
-PYTHONPATH=. ./venv/bin/python3 -c "
+PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.knowledge.neo4j_store import Neo4jStore
 from src.models import *
 n = Neo4jStore(); n.connect()

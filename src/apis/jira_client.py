@@ -12,6 +12,13 @@ from src.models import Bug
 logger = logging.getLogger(__name__)
 
 
+def _next_version(release: str) -> str:
+    """Return the next minor version string. '4.21' → '4.22', '5.0' → '5.1'."""
+    parts = release.split(".")
+    parts[-1] = str(int(parts[-1]) + 1)
+    return ".".join(parts)
+
+
 def _extract_text_from_adf(doc: dict) -> str:
     """Extract plain text from Atlassian Document Format (ADF).
 
@@ -64,25 +71,103 @@ class JiraClient:
 
         When priority_filter is True, fetches Critical/Major/Blocker bugs first,
         then backfills with remaining bugs up to max_results.
-        When release is set (e.g. "4.21"), filters by affectedVersion.
+
+        Three-tier version query when release is set (e.g. "4.21"):
+          Tier 1: affectedVersion in the target release range (>= 4.21, < 4.22)
+          Tier 2: older versions that are still open (unfixed, likely still present)
+          Tier 3: no affectedVersion set
         """
         component_list = ", ".join(f'"{c}"' for c in components)
+
         if release:
-            # Match all version variants: 4.21, 4.21.0, 4.21.z
-            version_variants = f'"{release}", "{release}.0", "{release}.z"'
-            version_clause = f" AND affectedVersion IN ({version_variants})"
-        else:
-            version_clause = ""
+            next_minor = _next_version(release)
+            bugs = self._three_tier_version_query(
+                component_list, release, next_minor, days, max_results, priority_filter,
+            )
+            return bugs
 
         if not priority_filter:
             jql = (
                 f"project = OCPBUGS AND component IN ({component_list})"
-                f"{version_clause}"
                 f" AND created >= -{days}d ORDER BY created DESC"
             )
             return self._search(jql, max_results)
 
-        # Priority bugs first
+        return self._priority_then_backfill(component_list, "", days, max_results)
+
+    def _three_tier_version_query(
+        self,
+        component_list: str,
+        release: str,
+        next_minor: str,
+        days: int,
+        max_results: int,
+        priority_filter: bool,
+    ) -> list[Bug]:
+        """Fetch bugs using three-tier version matching."""
+        seen_keys: set[str] = set()
+        all_bugs: list[Bug] = []
+
+        # Tier 1: Bugs explicitly tagged with the target release
+        tier1_clause = f' AND affectedVersion >= "{release}" AND affectedVersion < "{next_minor}"'
+        tier1 = self._priority_then_backfill(
+            component_list, tier1_clause, days, max_results,
+        ) if priority_filter else self._search(
+            f"project = OCPBUGS AND component IN ({component_list})"
+            f"{tier1_clause} AND created >= -{days}d ORDER BY created DESC",
+            max_results,
+        )
+        for b in tier1:
+            if b.key not in seen_keys:
+                seen_keys.add(b.key)
+                all_bugs.append(b)
+        logger.info("Version tier 1 (%s.*): %d bugs", release, len(tier1))
+
+        if len(all_bugs) >= max_results:
+            return all_bugs[:max_results]
+
+        # Tier 2: Open bugs from older versions (unfixed, likely still present)
+        remaining = max_results - len(all_bugs)
+        tier2_jql = (
+            f"project = OCPBUGS AND component IN ({component_list})"
+            f' AND affectedVersion < "{release}"'
+            f' AND status NOT IN (Closed, Verified, "Release Pending")'
+            f" AND created >= -{days}d ORDER BY priority ASC, created DESC"
+        )
+        tier2 = self._search(tier2_jql, remaining)
+        for b in tier2:
+            if b.key not in seen_keys:
+                seen_keys.add(b.key)
+                all_bugs.append(b)
+        logger.info("Version tier 2 (older, open): %d bugs", len(tier2))
+
+        if len(all_bugs) >= max_results:
+            return all_bugs[:max_results]
+
+        # Tier 3: Bugs with no affectedVersion set
+        remaining = max_results - len(all_bugs)
+        tier3_jql = (
+            f"project = OCPBUGS AND component IN ({component_list})"
+            f" AND affectedVersion IS EMPTY"
+            f" AND created >= -{days}d ORDER BY created DESC"
+        )
+        tier3 = self._search(tier3_jql, remaining)
+        for b in tier3:
+            if b.key not in seen_keys:
+                seen_keys.add(b.key)
+                all_bugs.append(b)
+        logger.info("Version tier 3 (no version): %d bugs", len(tier3))
+
+        return all_bugs[:max_results]
+
+    def _priority_then_backfill(
+        self,
+        component_list: str,
+        version_clause: str,
+        days: int,
+        max_results: int,
+    ) -> list[Bug]:
+        """Fetch priority bugs first, then backfill with remaining."""
         priority_jql = (
             f"project = OCPBUGS AND component IN ({component_list})"
             f"{version_clause}"
@@ -94,7 +179,6 @@ class JiraClient:
         if len(priority_bugs) >= max_results:
             return priority_bugs
 
-        # Backfill with remaining bugs (any priority, excluding already-fetched)
         seen_keys = {b.key for b in priority_bugs}
         remaining = max_results - len(priority_bugs)
         all_jql = (
