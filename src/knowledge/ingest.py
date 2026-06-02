@@ -601,11 +601,113 @@ def ingest_krkn_claude_md(github: GitHubClient, chroma: ChromaStore) -> int:
     return len(chunks)
 
 
+def _ingest_github_docs(
+    github: GitHubClient, agent_name: str, doc_source: dict,
+) -> list[DocChunk]:
+    """Ingest docs from a GitHub repo path."""
+    owner = doc_source["owner"]
+    repo = doc_source["repo"]
+    path = doc_source.get("path", "")
+
+    files = _list_files_recursive(
+        github, owner, repo, path,
+        extensions=(".md", ".adoc", ".yaml", ".yml", ".rst"),
+    )
+    logger.info("  github %s/%s/%s: %d files", owner, repo, path, len(files))
+
+    chunks = []
+    for f in files:
+        content = github.get_file_content(owner, repo, f["path"])
+        if not content:
+            continue
+
+        if f["name"].endswith(".adoc"):
+            cleaned = _clean_asciidoc(content)
+        elif f["name"].endswith((".md", ".rst")):
+            cleaned = _clean_markdown(content)
+        else:
+            cleaned = content
+
+        if len(cleaned) < 30:
+            continue
+
+        text = f"Source: {owner}/{repo} — {f['path']}\n\n{cleaned}"
+        for chunk in _chunk_text(text):
+            chunks.append(DocChunk(
+                text=chunk, component=agent_name,
+                doc_type="agent-docs", source=f"{owner}/{repo}", version="",
+            ))
+    return chunks
+
+
+def _ingest_local_docs(agent_name: str, doc_source: dict) -> list[DocChunk]:
+    """Ingest docs from a local directory."""
+    local_path = Path(doc_source["path"]).expanduser()
+    if not local_path.is_dir():
+        logger.warning("  local path not found: %s", local_path)
+        return []
+
+    extensions = {".md", ".adoc", ".txt", ".yaml", ".yml", ".rst"}
+    files = [f for f in local_path.rglob("*") if f.suffix in extensions and f.is_file()]
+    logger.info("  local %s: %d files", local_path, len(files))
+
+    chunks = []
+    for f in files:
+        content = f.read_text(errors="replace")
+        if f.suffix == ".adoc":
+            cleaned = _clean_asciidoc(content)
+        elif f.suffix in (".md", ".rst"):
+            cleaned = _clean_markdown(content)
+        else:
+            cleaned = content
+
+        if len(cleaned) < 30:
+            continue
+
+        text = f"Source: local — {f.relative_to(local_path)}\n\n{cleaned}"
+        for chunk in _chunk_text(text):
+            chunks.append(DocChunk(
+                text=chunk, component=agent_name,
+                doc_type="agent-docs", source=str(local_path), version="",
+            ))
+    return chunks
+
+
+def _ingest_url_doc(agent_name: str, doc_source: dict) -> list[DocChunk]:
+    """Ingest a single web page URL."""
+    import urllib.request
+    import urllib.error
+
+    url = doc_source["url"]
+    logger.info("  url %s", url)
+
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            content = resp.read().decode("utf-8", errors="replace")
+    except (urllib.error.URLError, urllib.error.HTTPError) as e:
+        logger.warning("  failed to fetch %s: %s", url, e)
+        return []
+
+    cleaned = _clean_html(content)
+    if len(cleaned) < 30:
+        return []
+
+    text = f"Source: {url}\n\n{cleaned}"
+    return [
+        DocChunk(
+            text=chunk, component=agent_name,
+            doc_type="agent-docs", source=url, version="",
+        )
+        for chunk in _chunk_text(text)
+    ]
+
+
 def ingest_agent_docs(github: GitHubClient, chroma: ChromaStore) -> int:
     """Ingest domain-specific docs defined in agent YAML configs.
 
     Reads the `docs` field from each config/agents/*.yaml and ingests
-    those GitHub paths into ChromaDB tagged with the agent's domain.
+    those sources into ChromaDB tagged with the agent's domain.
+    Supports three source types: github, local, url.
     """
     from src.agents.registry import discover_agents
 
@@ -618,48 +720,22 @@ def ingest_agent_docs(github: GitHubClient, chroma: ChromaStore) -> int:
 
         logger.info("Ingesting docs for agent '%s' (%d sources)", agent_name, len(config.docs))
 
+        all_chunks: list[DocChunk] = []
         for doc_source in config.docs:
-            owner = doc_source["owner"]
-            repo = doc_source["repo"]
-            path = doc_source["path"]
+            doc_type = doc_source.get("type", "github")
+            if doc_type == "github":
+                all_chunks.extend(_ingest_github_docs(github, agent_name, doc_source))
+            elif doc_type == "local":
+                all_chunks.extend(_ingest_local_docs(agent_name, doc_source))
+            elif doc_type == "url":
+                all_chunks.extend(_ingest_url_doc(agent_name, doc_source))
+            else:
+                logger.warning("  unknown doc type '%s', skipping", doc_type)
 
-            files = _list_files_recursive(
-                github, owner, repo, path,
-                extensions=(".md", ".adoc", ".yaml", ".yml", ".rst"),
-            )
-            logger.info("  %s/%s/%s: %d files", owner, repo, path, len(files))
-
-            chunks = []
-            for f in files:
-                content = github.get_file_content(owner, repo, f["path"])
-                if not content:
-                    continue
-
-                if f["name"].endswith(".adoc"):
-                    cleaned = _clean_asciidoc(content)
-                elif f["name"].endswith((".md", ".rst")):
-                    cleaned = _clean_markdown(content)
-                else:
-                    cleaned = content
-
-                if len(cleaned) < 30:
-                    continue
-
-                text = f"Source: {owner}/{repo} — {f['path']}\n\n{cleaned}"
-
-                for chunk in _chunk_text(text):
-                    chunks.append(DocChunk(
-                        text=chunk,
-                        component=agent_name,
-                        doc_type="agent-docs",
-                        source=f"{owner}/{repo}",
-                        version="",
-                    ))
-
-            if chunks:
-                chroma.add_ocp_docs(chunks)
-                total_chunks += len(chunks)
-                logger.info("  Ingested %d chunks for %s", len(chunks), agent_name)
+        if all_chunks:
+            chroma.add_ocp_docs(all_chunks)
+            total_chunks += len(all_chunks)
+            logger.info("  Ingested %d chunks for %s", len(all_chunks), agent_name)
 
     logger.info("Agent docs ingestion: %d total chunks", total_chunks)
     return total_chunks

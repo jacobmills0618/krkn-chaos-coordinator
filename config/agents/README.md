@@ -45,18 +45,38 @@ components:
   - "Virtualization / virt-controller"
   - "Virtualization / virt-handler"
   - "Virtualization / virt-operator"
+filter:
+  chaos_keywords:
+    - "vm migration failed"
+    - "virt-launcher crash"
+    - "live migrate timeout"
+  skip_keywords:
+    - "cnv-must-gather"
 docs:
-  - owner: kubevirt
+  # GitHub repo path
+  - type: github
+    owner: kubevirt
     repo: kubevirt
     path: docs
-  - owner: openshift
-    repo: openshift-docs
-    path: modules/virt
+
+  # Local files/directory
+  - type: local
+    path: /home/user/cnv-architecture-docs
+
+  # Web URL (single page, fetched and chunked)
+  - type: url
+    url: https://kubevirt.io/user-guide/architecture/
 ```
 
-The `docs` field tells the ingestion script to pull documentation from those GitHub
-paths into ChromaDB, tagged with the agent's domain. This gives the LLM domain-specific
-context when analyzing bugs for this agent.
+### Doc source types
+
+| Type | Fields | What it does |
+|------|--------|-------------|
+| `github` | `owner`, `repo`, `path` | Recursively fetches .md/.adoc/.yaml files from a GitHub repo directory |
+| `local` | `path` | Reads .md/.adoc/.txt/.yaml files from a local directory |
+| `url` | `url` | Fetches a single web page, strips HTML, chunks into ChromaDB |
+
+If `type` is omitted, defaults to `github` (backward compatible).
 
 Run ingestion after adding docs:
 ```bash

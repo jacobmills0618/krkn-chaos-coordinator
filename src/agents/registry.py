@@ -40,11 +40,20 @@ def _load_agent_config(path: Path) -> AgentConfig:
         raise ValueError(f"{path.name}: 'components' list is empty")
 
     docs_raw = data.get("docs", [])
-    docs = tuple(
-        {"owner": d["owner"], "repo": d["repo"], "path": d["path"]}
-        for d in docs_raw
-        if isinstance(d, dict) and all(k in d for k in ("owner", "repo", "path"))
-    )
+    docs = []
+    for d in docs_raw:
+        if not isinstance(d, dict):
+            continue
+        doc_type = d.get("type", "github")
+        if doc_type == "github" and all(k in d for k in ("owner", "repo", "path")):
+            docs.append({"type": "github", "owner": d["owner"], "repo": d["repo"], "path": d["path"]})
+        elif doc_type == "local" and "path" in d:
+            docs.append({"type": "local", "path": d["path"]})
+        elif doc_type == "url" and "url" in d:
+            docs.append({"type": "url", "url": d["url"]})
+        elif doc_type == "github" and all(k in d for k in ("owner", "repo")):
+            docs.append({"type": "github", "owner": d["owner"], "repo": d["repo"], "path": d.get("path", "")})
+    docs = tuple(docs)
 
     return AgentConfig(
         name=name,
