@@ -70,15 +70,13 @@ for name, cfg in sorted(discover_agents().items()):
 - Question: "What kind of scan?"
 - Options:
   - "Full scan (Recommended)" — All bugs, LLM enabled, complete analysis
-  - "Quick scan" — 50 bugs max, 7 days, LLM enabled (fast validation)
-  - "Deep scan" — All bugs, 60 days lookback, LLM enabled (thorough)
+  - "Quick scan" — 50 bugs max, LLM enabled (fast validation)
   - "Keyword only" — All bugs, no LLM (fast, free, less accurate)
 
-Map selections to CLI flags:
-- "Full scan" → `--max-bugs 2000 --days 14 --use-llm`
-- "Quick scan" → `--max-bugs 50 --days 7 --use-llm`
-- "Deep scan" → `--max-bugs 2000 --days 60 --use-llm`
-- "Keyword only" → `--max-bugs 2000 --days 14` (no --use-llm)
+Map selections to CLI flags (use the days value from Question 3):
+- "Full scan" → `--max-bugs 2000 --use-llm`
+- "Quick scan" → `--max-bugs 50 --use-llm`
+- "Keyword only" → `--max-bugs 2000` (no --use-llm)
 
 ## Running the Pipeline
 
