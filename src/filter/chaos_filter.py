@@ -4,169 +4,96 @@ Core rule: If a bug involves a component behaving incorrectly during, after,
 or because of any disruption (restart, failure, load, resource pressure,
 upgrade, scaling) — it's chaos-relevant. Even if the symptom appears in a
 different component than the root cause.
+
+Keywords are loaded from config/filters/common.yaml (shared) and merged
+with agent-specific keywords from config/agents/<name>.yaml.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+
+import yaml
 
 from src.models import Bug, FilterResult
 
 logger = logging.getLogger(__name__)
 
-# Keywords that indicate a bug is NOT chaos-relevant
-NON_CHAOS_KEYWORDS = [
-    "CVE-",
-    "security tracking",
-    "vulnerability",
-    "flaky test",
-    "test infrastructure",
-    "ci failure",
-    "test fix",
-    "documentation",
-    "typo",
-    "backport",
-    "cherry-pick",
-    "cherry pick",
-    "bump to",
-    "bump ",
-    "rebase",
-    "vendor update",
-    "dependency update",
-    "[stub]",
-]
+_FILTERS_DIR = Path(__file__).parent.parent.parent / "config" / "filters"
+_AGENTS_DIR = Path(__file__).parent.parent.parent / "config" / "agents"
 
-# Keywords that indicate a bug IS chaos-relevant
-CHAOS_KEYWORDS = [
-    # Component crash/restart
-    "crash",
-    "panic",
-    "oom",
-    "out of memory",
-    "oom kill",
-    "deadlock",
-    "crashloop",
-    "restart loop",
-    # Timeouts and degradation
-    "timeout",
-    "timed out",
-    "context deadline",
-    "unavailable",
-    "degraded",
-    "unhealthy",
-    "not ready",
-    # Performance degradation (NEW)
-    "slow",
-    "latency increased",
-    "high latency",
-    "p99",
-    "p95",
-    "response time",
-    "throughput",
-    "performance degradation",
-    "performance regression",
-    # Cluster health (NEW)
-    "cluster operator",
-    "clusteroperator",
-    "co degraded",
-    "co unavailable",
-    "operator degraded",
-    "operator unavailable",
-    "cluster unhealthy",
-    # Consensus and leadership
-    "quorum",
-    "leader election",
-    "split brain",
-    # Node failures
-    "node drain",
-    "node reboot",
-    "node delete",
-    "node replace",
-    "node failure",
-    "node not ready",
-    # Network disruption
-    "network partition",
-    "latency",
-    "packet loss",
-    "dns failure",
-    "connection refused",
-    "connection reset",
-    "connection timeout",
-    # Service disruption (NEW)
-    "service down",
-    "endpoint not reachable",
-    "service unavailable",
-    "502",
-    "503",
-    "504",
-    # Resource exhaustion (NEW)
-    "high cpu",
-    "memory leak",
-    "resource quota",
-    "limit reached",
-    "resource exhaustion",
-    "cpu spike",
-    "memory spike",
-    "disk full",
-    "disk pressure",
-    "memory pressure",
-    "resource pressure",
-    "throttl",
-    # Scaling (NEW)
-    "scale up failed",
-    "autoscaler",
-    "pending pods",
-    "scheduling failed",
-    "insufficient resources",
-    "node pressure",
-    "capacity",
-    # Pod disruption
-    "pod eviction",
-    "pod kill",
-    "pod disruption",
-    # Upgrade/rollback (expanded)
-    "upgrade fail",
-    "upgrade from",
-    "upgrade to",
-    "rollback",
-    "doesn't recover",
-    "doesn't reconcile",
-    "failed to reconcile",
-    "not reconciling",
-    "stale after restart",
-    # Intermittent failures (NEW)
-    "intermittent",
-    "flapping",
-    "under load",
-    "under pressure",
-    "under stress",
-    # Certificates and time
-    "certificate expired",
-    "cert rotation",
-    "clock skew",
-    # Data integrity
-    "data loss",
-    "data corruption",
-    "corrupt",
-    "stale",
-    "not cleared",
-    "missing",
-    # General failure indicators
-    "failover",
-    "recovery",
-    "stuck",
-    "outage",
-    "disruption",
-    "failure",
-    "failed",
-    "kill",
-    "lost",
-    "static pod",
-    "member",
-    "scale",
-]
 
-# krkn injection capabilities for Part 2 of the filter
+# ---------------------------------------------------------------------------
+# Keyword loading (cached)
+# ---------------------------------------------------------------------------
+
+_common_cache: dict | None = None
+
+
+def _load_common_filters() -> dict:
+    """Load common filter keywords from config/filters/common.yaml, cached."""
+    global _common_cache
+    if _common_cache is not None:
+        return _common_cache
+
+    path = _FILTERS_DIR / "common.yaml"
+    if not path.exists():
+        logger.warning("Common filter config not found at %s, using empty", path)
+        _common_cache = {"skip_keywords": [], "chaos_keywords": []}
+        return _common_cache
+
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+
+    _common_cache = {
+        "skip_keywords": [str(k) for k in data.get("skip_keywords", [])],
+        "chaos_keywords": [str(k) for k in data.get("chaos_keywords", [])],
+    }
+    return _common_cache
+
+
+def _load_agent_filter(agent_name: str) -> dict:
+    """Load agent-specific filter keywords from config/agents/<name>.yaml."""
+    path = _AGENTS_DIR / f"{agent_name}.yaml"
+    if not path.exists():
+        return {"skip_keywords": [], "chaos_keywords": []}
+
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+
+    filt = data.get("filter", {})
+    if not filt:
+        return {"skip_keywords": [], "chaos_keywords": []}
+
+    return {
+        "skip_keywords": [str(k) for k in filt.get("skip_keywords", [])],
+        "chaos_keywords": [str(k) for k in filt.get("chaos_keywords", [])],
+    }
+
+
+def get_filter_keywords(agent_name: str | None = None) -> tuple[list[str], list[str]]:
+    """Return merged (skip_keywords, chaos_keywords) for an agent.
+
+    Common keywords + agent-specific keywords. Agent keywords are appended,
+    not replacing common ones.
+    """
+    common = _load_common_filters()
+    skip = list(common["skip_keywords"])
+    chaos = list(common["chaos_keywords"])
+
+    if agent_name:
+        agent = _load_agent_filter(agent_name)
+        skip.extend(agent["skip_keywords"])
+        chaos.extend(agent["chaos_keywords"])
+
+    return skip, chaos
+
+
+# ---------------------------------------------------------------------------
+# krkn injection capabilities
+# ---------------------------------------------------------------------------
+
 KRKN_CAPABILITIES = [
     "pod failures (kill, restart, CPU/memory hog)",
     "node failures (drain, reboot, shutdown, network isolate)",
@@ -179,15 +106,19 @@ KRKN_CAPABILITIES = [
 ]
 
 
-def filter_bug(bug: Bug) -> FilterResult:
+# ---------------------------------------------------------------------------
+# Filter logic
+# ---------------------------------------------------------------------------
+
+def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
     """Determine if a bug is chaos-relevant using keyword heuristics.
 
     Part 1: Is this a failure mode? (vs code bug, CVE, UI issue)
     Part 2: Can krkn inject this? (match against capabilities)
     """
+    skip_keywords, chaos_keywords = get_filter_keywords(agent_name)
     text = f"{bug.summary} {bug.description}".lower()
 
-    # Check for clone/stub in first 200 chars
     if "clone of issue" in text[:200] or "[stub]" in bug.summary.lower():
         return FilterResult(
             bug=bug,
@@ -196,8 +127,7 @@ def filter_bug(bug: Bug) -> FilterResult:
             confidence=0.95,
         )
 
-    # Part 1: Check for non-chaos indicators
-    for keyword in NON_CHAOS_KEYWORDS:
+    for keyword in skip_keywords:
         if keyword.lower() in text:
             return FilterResult(
                 bug=bug,
@@ -206,8 +136,7 @@ def filter_bug(bug: Bug) -> FilterResult:
                 confidence=0.95,
             )
 
-    # Part 1: Check for chaos indicators
-    matched_keywords = [kw for kw in CHAOS_KEYWORDS if kw.lower() in text]
+    matched_keywords = [kw for kw in chaos_keywords if kw.lower() in text]
     if not matched_keywords:
         return FilterResult(
             bug=bug,
@@ -216,7 +145,6 @@ def filter_bug(bug: Bug) -> FilterResult:
             confidence=0.7,
         )
 
-    # Part 2: Determine injection method
     failure_mode = _extract_failure_mode(text, matched_keywords)
     injection_method = _match_injection_method(text)
 
@@ -229,7 +157,6 @@ def filter_bug(bug: Bug) -> FilterResult:
             confidence=0.3,
         )
 
-    # Check if only generic failure keywords matched (less specific)
     specific_keywords = [
         "crash", "panic", "oom", "out of memory", "deadlock", "crashloop",
         "node drain", "node reboot", "node delete", "network partition",
@@ -257,16 +184,13 @@ def filter_bug(bug: Bug) -> FilterResult:
     )
 
 
-def filter_bugs(bugs: list[Bug]) -> tuple[list[FilterResult], list[FilterResult]]:
-    """Filter a list of bugs into chaos-relevant and non-relevant.
-
-    Returns (relevant, skipped) tuples.
-    """
+def filter_bugs(bugs: list[Bug], agent_name: str | None = None) -> tuple[list[FilterResult], list[FilterResult]]:
+    """Filter a list of bugs into chaos-relevant and non-relevant."""
     relevant = []
     skipped = []
 
     for bug in bugs:
-        result = filter_bug(bug)
+        result = filter_bug(bug, agent_name)
         if result.chaos_relevant:
             relevant.append(result)
             logger.info(
@@ -290,10 +214,7 @@ def _extract_failure_mode(text: str, matched_keywords: list[str]) -> str:
 
 
 def _match_injection_method(text: str) -> str | None:
-    """Match bug description against krkn's injection capabilities.
-
-    Priority order matters — more specific matches first.
-    """
+    """Match bug description against krkn's injection capabilities."""
     injection_rules: list[tuple[str, list[str]]] = [
         ("node", [
             "node delete", "node replace", "node drain", "node reboot",
@@ -349,7 +270,6 @@ def _match_injection_method(text: str) -> str | None:
             if kw in text:
                 return capability
 
-    # Fallback: generic failure keywords
     generic = [
         "fail", "crash", "unavailable", "degraded", "unhealthy",
         "disruption", "outage", "panic", "deadlock", "stuck",

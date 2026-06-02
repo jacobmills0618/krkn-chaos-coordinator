@@ -197,7 +197,7 @@ class BaseDomainAgent(ABC):
         if self.use_llm:
             logger.info("Using tiered filter: keyword → cache → LLM")
             return self._tiered_filter(bugs, metrics)
-        return filter_bugs(bugs)
+        return filter_bugs(bugs, agent_name=self.agent_name)
 
     def _tiered_filter(
         self, bugs: list[Bug], metrics: RunMetrics,
@@ -209,7 +209,7 @@ class BaseDomainAgent(ABC):
 
         # Layer 1: Keyword pre-filter
         for bug in bugs:
-            kw_result = filter_bug(bug)
+            kw_result = filter_bug(bug, agent_name=self.agent_name)
             if kw_result.confidence > 0.8:
                 if kw_result.chaos_relevant:
                     relevant.append(kw_result)

@@ -1,0 +1,165 @@
+# Common chaos relevance filter keywords — shared across all agents.
+# Agent-specific keywords go in each agent's YAML (config/agents/<name>.yaml).
+
+skip_keywords:
+  - "CVE-"
+  - "security tracking"
+  - "vulnerability"
+  - "flaky test"
+  - "test infrastructure"
+  - "ci failure"
+  - "test fix"
+  - "documentation"
+  - "typo"
+  - "backport"
+  - "cherry-pick"
+  - "cherry pick"
+  - "bump to"
+  - "bump "
+  - "rebase"
+  - "vendor update"
+  - "dependency update"
+  - "[stub]"
+
+chaos_keywords:
+  # Component crash/restart
+  - "crash"
+  - "panic"
+  - "oom"
+  - "out of memory"
+  - "oom kill"
+  - "deadlock"
+  - "crashloop"
+  - "restart loop"
+
+  # Timeouts and degradation
+  - "timeout"
+  - "timed out"
+  - "context deadline"
+  - "unavailable"
+  - "degraded"
+  - "unhealthy"
+  - "not ready"
+
+  # Performance degradation
+  - "slow"
+  - "latency increased"
+  - "high latency"
+  - "p99"
+  - "p95"
+  - "response time"
+  - "throughput"
+  - "performance degradation"
+  - "performance regression"
+
+  # Cluster health
+  - "cluster operator"
+  - "clusteroperator"
+  - "co degraded"
+  - "co unavailable"
+  - "operator degraded"
+  - "operator unavailable"
+  - "cluster unhealthy"
+
+  # Consensus and leadership
+  - "quorum"
+  - "leader election"
+  - "split brain"
+
+  # Node failures
+  - "node drain"
+  - "node reboot"
+  - "node delete"
+  - "node replace"
+  - "node failure"
+  - "node not ready"
+
+  # Network disruption
+  - "network partition"
+  - "latency"
+  - "packet loss"
+  - "dns failure"
+  - "connection refused"
+  - "connection reset"
+  - "connection timeout"
+
+  # Service disruption
+  - "service down"
+  - "endpoint not reachable"
+  - "service unavailable"
+  - "502"
+  - "503"
+  - "504"
+
+  # Resource exhaustion
+  - "high cpu"
+  - "memory leak"
+  - "resource quota"
+  - "limit reached"
+  - "resource exhaustion"
+  - "cpu spike"
+  - "memory spike"
+  - "disk full"
+  - "disk pressure"
+  - "memory pressure"
+  - "resource pressure"
+  - "throttl"
+
+  # Scaling
+  - "scale up failed"
+  - "autoscaler"
+  - "pending pods"
+  - "scheduling failed"
+  - "insufficient resources"
+  - "node pressure"
+  - "capacity"
+
+  # Pod disruption
+  - "pod eviction"
+  - "pod kill"
+  - "pod disruption"
+
+  # Upgrade/rollback
+  - "upgrade fail"
+  - "upgrade from"
+  - "upgrade to"
+  - "rollback"
+  - "doesn't recover"
+  - "doesn't reconcile"
+  - "failed to reconcile"
+  - "not reconciling"
+  - "stale after restart"
+
+  # Intermittent failures
+  - "intermittent"
+  - "flapping"
+  - "under load"
+  - "under pressure"
+  - "under stress"
+
+  # Certificates and time
+  - "certificate expired"
+  - "cert rotation"
+  - "clock skew"
+
+  # Data integrity
+  - "data loss"
+  - "data corruption"
+  - "corrupt"
+  - "stale"
+  - "not cleared"
+  - "missing"
+
+  # General failure indicators
+  - "failover"
+  - "recovery"
+  - "stuck"
+  - "outage"
+  - "disruption"
+  - "failure"
+  - "failed"
+  - "kill"
+  - "lost"
+  - "static pod"
+  - "member"
+  - "scale"
