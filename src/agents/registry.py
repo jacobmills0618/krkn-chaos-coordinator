@@ -23,6 +23,7 @@ class AgentConfig:
     name: str
     description: str
     components: tuple[str, ...]
+    docs: tuple[dict, ...] = ()
 
 
 def _load_agent_config(path: Path) -> AgentConfig:
@@ -38,10 +39,18 @@ def _load_agent_config(path: Path) -> AgentConfig:
     if not components:
         raise ValueError(f"{path.name}: 'components' list is empty")
 
+    docs_raw = data.get("docs", [])
+    docs = tuple(
+        {"owner": d["owner"], "repo": d["repo"], "path": d["path"]}
+        for d in docs_raw
+        if isinstance(d, dict) and all(k in d for k in ("owner", "repo", "path"))
+    )
+
     return AgentConfig(
         name=name,
         description=data.get("description", ""),
         components=tuple(components),
+        docs=docs,
     )
 
 

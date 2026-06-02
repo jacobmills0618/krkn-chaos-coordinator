@@ -20,6 +20,7 @@ components:
 | `name` | Yes | Unique agent identifier (used in `--agent` flag) |
 | `description` | No | Short description shown in help text |
 | `components` | Yes | List of OCPBUGS component names this agent monitors |
+| `docs` | No | List of GitHub repos to ingest into ChromaDB for domain-specific context |
 
 ## Finding Component Names
 
@@ -44,6 +45,22 @@ components:
   - "Virtualization / virt-controller"
   - "Virtualization / virt-handler"
   - "Virtualization / virt-operator"
+docs:
+  - owner: kubevirt
+    repo: kubevirt
+    path: docs
+  - owner: openshift
+    repo: openshift-docs
+    path: modules/virt
+```
+
+The `docs` field tells the ingestion script to pull documentation from those GitHub
+paths into ChromaDB, tagged with the agent's domain. This gives the LLM domain-specific
+context when analyzing bugs for this agent.
+
+Run ingestion after adding docs:
+```bash
+PYTHONPATH=. python -m src.knowledge.ingest ./chroma_data
 ```
 
 Then run:

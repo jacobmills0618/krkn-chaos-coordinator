@@ -2,7 +2,7 @@
 
 AI-driven multi-agent system that autonomously expands [krkn](https://github.com/krkn-chaos/krkn) chaos test coverage for OpenShift clusters by monitoring JIRA bugs, identifying coverage gaps, and creating PRs/issues.
 
-**Current stats (June 2026):** 3,000+ bugs analyzed, 465+ gaps identified, 188 tests passing, $0.18/run with claude_code provider.
+**Current stats (June 2026):** 3,000+ bugs analyzed, 465+ gaps identified, 200 tests passing, $0.18/run with claude_code provider.
 
 ## How It Works
 
@@ -29,7 +29,7 @@ Orchestrator (dedup, approval queue)
 └── Upgrade & Lifecycle    (CVO, MCO, Installer variants)
 ```
 
-6 domain agents covering 96 OCPBUGS components. All share the same pipeline.
+Pluggable agents — auto-discovered from `config/agents/*.yaml`. 6 built-in agents covering 96 OCPBUGS components. Drop a YAML file to add a new domain.
 
 ## Knowledge Layer
 
@@ -136,17 +136,38 @@ PYTHONPATH=. python src/main.py --release 4.21 --use-llm
 PYTHONPATH=. streamlit run src/ui/web_dashboard.py --server.port 8501
 ```
 
+### Adding a New Agent
+
+Create a YAML file in `config/agents/`. No code changes needed.
+
+```yaml
+# config/agents/virtualization.yaml
+name: virtualization
+description: "OpenShift Virtualization / CNV / KubeVirt"
+components:
+  - "OpenShift Virtualization"
+  - "Virtualization / virt-controller"
+  - "Virtualization / virt-handler"
+```
+
+Then run:
+```bash
+PYTHONPATH=. python src/main.py --release 4.21 --agent virtualization --use-llm
+```
+
+See [config/agents/README.md](config/agents/README.md) for details and how to find OCPBUGS component names.
+
 ### Run Tests
 
 ```bash
 # Unit tests (no external deps, ~0.2s)
-PYTHONPATH=. pytest tests/unit/ -v                    # 175 tests
+PYTHONPATH=. pytest tests/unit/ -v                    # 187 tests
 
 # Integration tests (requires Neo4j)
 PYTHONPATH=. pytest tests/integration/ -v             # 13 tests
 
 # All tests
-PYTHONPATH=. pytest tests/ -v                         # 188 total
+PYTHONPATH=. pytest tests/ -v                         # 200 total
 
 # Run filter eval (Sonnet vs Haiku comparison)
 PYTHONPATH=. python -m src.evals.filter_eval --sample-size 20
@@ -155,6 +176,15 @@ PYTHONPATH=. python -m src.evals.filter_eval --sample-size 20
 ## Project Structure
 
 ```
+config/
+└── agents/                        # Drop a YAML file here to add a new agent
+    ├── control_plane.yaml
+    ├── networking.yaml
+    ├── node_machine.yaml
+    ├── storage.yaml
+    ├── operators_platform.yaml
+    └── upgrade_lifecycle.yaml
+
 src/
 ├── main.py                        # CLI entry point (multi-version, multi-agent)
 ├── models.py                      # Domain models (Bug, Gap, Observation, RunMetrics)
@@ -164,7 +194,7 @@ src/
 │   └── orchestrator.py            # Dedup, approval queue, run summary
 ├── agents/
 │   ├── base_agent.py              # Pipeline: DISCOVER→FILTER→MAP→ANALYZE→ACT→REMEMBER
-│   ├── control_plane_agent.py     # + 5 other domain agents
+│   ├── registry.py                # Auto-discovers agents from config/agents/*.yaml
 │   ├── pr_creator.py              # Draft PR creation
 │   ├── hub_generator.py           # krkn-hub boilerplate
 │   └── docs_generator.py          # Website docs
@@ -176,7 +206,7 @@ src/
 ├── knowledge/
 │   ├── chromadb_store.py          # Vector search (4 collections)
 │   ├── neo4j_store.py             # Graph memory (single backend)
-│   ├── component_map.py           # 6 agents → 96 OCPBUGS components
+│   ├── component_map.py           # Delegates to registry for agent → component mapping
 │   ├── filter_cache.py            # Semantic cache (Cache-Aside pattern)
 │   ├── scenario_index.py          # Index krkn scenario YAMLs
 │   └── scenario_knowledgebase.py  # krkn-knowledgebase integration

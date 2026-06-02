@@ -7,7 +7,7 @@ AI-driven multi-agent system that expands krkn chaos test coverage for OpenShift
 ## Architecture
 
 - **1 Lightweight Orchestrator** — spawns agents, deduplicates, presents approval queue
-- **6 Domain Agents** — each covers an OpenShift component area (96 OCPBUGS components total)
+- **Pluggable Domain Agents** — auto-discovered from `config/agents/*.yaml` (6 built-in, drop a YAML to add more)
 - **Pipeline**: DISCOVER → FILTER → MAP → ANALYZE → ACT → REMEMBER
 - **Knowledge**: ChromaDB (docs/scenarios) + Neo4j (operational memory graph)
 - **LLM**: 5 pluggable providers (claude_code, anthropic, ollama, openai, google) with per-phase model routing
@@ -16,6 +16,10 @@ AI-driven multi-agent system that expands krkn chaos test coverage for OpenShift
 
 ```
 krkn-chaos-coordinator/
+├── config/
+│   └── agents/                    # Drop a YAML file here to add a new agent
+│       ├── control_plane.yaml     # 6 built-in agents
+│       └── ...
 ├── src/
 │   ├── main.py                    # Entry point (multi-version, multi-agent)
 │   ├── models.py                  # Domain models (Bug, Gap, Observation, RunMetrics)
@@ -25,7 +29,7 @@ krkn-chaos-coordinator/
 │   │   └── orchestrator.py        # Dedup, format, approval queue
 │   ├── agents/
 │   │   ├── base_agent.py          # Base pipeline (DISCOVER→REMEMBER)
-│   │   └── control_plane_agent.py # + 5 other domain agents
+│   │   └── registry.py            # Auto-discovers agents from config/agents/*.yaml
 │   ├── apis/
 │   │   ├── jira_client.py         # JIRA REST API (three-tier version query)
 │   │   ├── sippy_client.py        # Sippy public API client
@@ -34,7 +38,7 @@ krkn-chaos-coordinator/
 │   ├── knowledge/
 │   │   ├── chromadb_store.py      # Vector search for docs
 │   │   ├── neo4j_store.py         # Graph memory (single backend, fail-fast)
-│   │   ├── component_map.py       # Agent → OCPBUGS component mapping
+│   │   ├── component_map.py       # Delegates to registry for agent→component mapping
 │   │   ├── scenario_index.py      # Index krkn scenario YAML files
 │   │   ├── filter_cache.py        # Semantic filter cache (Cache-Aside)
 │   │   └── scenario_knowledgebase.py # krkn-knowledgebase integration
@@ -49,7 +53,7 @@ krkn-chaos-coordinator/
 │       ├── sampler.py             # Stratified bug sampler
 │       └── eval_report.py         # Eval metrics + pass criteria
 ├── tests/
-│   ├── unit/                      # 175 unit tests
+│   ├── unit/                      # 187 unit tests
 │   └── integration/               # 13 Neo4j integration tests
 ├── docker-compose.yaml            # Neo4j for graph memory
 └── pyproject.toml                 # Project config
