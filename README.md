@@ -43,7 +43,7 @@ Orchestrator (dedup, approval queue)
 └── your_agent          drop a YAML in config/agents/
 ```
 
-6 built-in agents covering 113 JIRA components. Need a new domain? [Just add a YAML →](config/agents/README.md)
+6 built-in agents covering all major OpenShift component areas. Need a new domain? [Just add a YAML →](config/agents/README.md)
 
 ---
 
