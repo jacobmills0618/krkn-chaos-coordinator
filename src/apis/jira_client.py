@@ -144,19 +144,37 @@ class JiraClient:
         if len(all_bugs) >= max_results:
             return all_bugs[:max_results]
 
-        # Tier 3: Bugs with no affectedVersion set
+        # Tier 3: Open bugs from newer versions (if it exists on 5.0, it likely exists on 4.21)
         remaining = max_results - len(all_bugs)
         tier3_jql = (
             f"project = OCPBUGS AND component IN ({component_list})"
-            f" AND affectedVersion IS EMPTY"
-            f" AND created >= -{days}d ORDER BY created DESC"
+            f' AND affectedVersion >= "{next_minor}"'
+            f' AND status NOT IN (Closed, Verified, "Release Pending")'
+            f" AND created >= -{days}d ORDER BY priority ASC, created DESC"
         )
         tier3 = self._search(tier3_jql, remaining)
         for b in tier3:
             if b.key not in seen_keys:
                 seen_keys.add(b.key)
                 all_bugs.append(b)
-        logger.info("Version tier 3 (no version): %d bugs", len(tier3))
+        logger.info("Version tier 3 (newer, open): %d bugs", len(tier3))
+
+        if len(all_bugs) >= max_results:
+            return all_bugs[:max_results]
+
+        # Tier 4: Bugs with no affectedVersion set
+        remaining = max_results - len(all_bugs)
+        tier4_jql = (
+            f"project = OCPBUGS AND component IN ({component_list})"
+            f" AND affectedVersion IS EMPTY"
+            f" AND created >= -{days}d ORDER BY created DESC"
+        )
+        tier4 = self._search(tier4_jql, remaining)
+        for b in tier4:
+            if b.key not in seen_keys:
+                seen_keys.add(b.key)
+                all_bugs.append(b)
+        logger.info("Version tier 4 (no version): %d bugs", len(tier4))
 
         return all_bugs[:max_results]
 
