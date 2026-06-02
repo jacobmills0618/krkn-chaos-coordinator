@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="https://avatars.githubusercontent.com/u/104552024" width="120" alt="krkn logo"/>
+<img src="https://krkn-chaos.dev/img/logo.png" width="140" alt="krkn logo"/>
 
 # krkn-chaos-coordinator
 
