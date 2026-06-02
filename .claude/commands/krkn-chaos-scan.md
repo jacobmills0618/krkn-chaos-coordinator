@@ -1,9 +1,9 @@
 ---
-description: Run krkn-chaos-coordinator scan — optionally pass a question or filter (e.g. "/run-scan what etcd coverage do we have?")
+description: Scan JIRA bugs for krkn chaos test coverage gaps — optionally pass a question or filter (e.g. "/krkn-chaos-scan what etcd coverage do we have?")
 allowed-tools: Bash, Read, Write, AskUserQuestion, mcp__jira__searchJiraIssuesUsingJql, mcp__github__create_issue
 ---
 
-# krkn-chaos-coordinator — Scan
+# krkn-chaos-scan
 
 You are the AI reasoning engine for krkn-chaos-coordinator. You use ChromaDB (4,089 chunks of krkn + OCP docs) and Neo4j (operational memory) to make intelligent chaos testing decisions.
 
@@ -33,7 +33,7 @@ If the user query is NOT empty, run in **Targeted Query** mode:
 
 ## Interactive Setup (Full Scan only)
 
-Before running the pipeline, ask the user two questions using AskUserQuestion:
+Before running the pipeline, ask the user these questions using AskUserQuestion. Ask all 4 in a single AskUserQuestion call:
 
 **Question 1 — OCP Version:**
 - Question: "Which OpenShift version(s) to scan?"
@@ -58,6 +58,22 @@ for name, cfg in sorted(discover_agents().items()):
 - Options: "All agents (Recommended)" plus one option per discovered agent (use name and description from the output above)
 - Note: Agents are auto-discovered from config/agents/*.yaml — new agents appear here automatically
 
+**Question 3 — Lookback Window:**
+- Question: "How many days back should we scan for bugs?"
+- Options:
+  - "14 days (Recommended)" — Last 2 weeks of bugs
+  - "7 days" — Last week only (quick scan)
+  - "30 days" — Full month (more thorough)
+  - "60 days" — Deep scan (catches older unfixed bugs)
+
+**Question 4 — Max Bugs per Agent:**
+- Question: "Maximum bugs to fetch per agent?"
+- Options:
+  - "All bugs (Recommended)" — No limit, fetch everything (default: 2000)
+  - "50" — Quick scan, good for testing
+  - "100" — Moderate scan
+  - "500" — Large scan
+
 ## Running the Pipeline
 
 After getting answers, run the pipeline using `main.py`:
@@ -67,8 +83,8 @@ cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@
   --release <VERSION_OR_COMMA_LIST> \
   --agent <AGENT_OR_COMMA_LIST_OR_all> \
   --use-llm \
-  --max-bugs 50 \
-  --days 14
+  --max-bugs <MAX_BUGS> \
+  --days <DAYS>
 ```
 
 **Examples:**
@@ -77,6 +93,13 @@ cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@
 - Multiple agents: `--agent control_plane,networking,storage`
 - All agents (omit --agent or pass "all"): `--release 4.21`
 - Everything: `--release 4.19,4.20,4.21 --agent all`
+- Quick scan: `--max-bugs 50 --days 7`
+- Deep scan: `--max-bugs 2000 --days 60`
+
+Map the user's interactive selections:
+- "All bugs" → `--max-bugs 2000`
+- "14 days" → `--days 14`
+- "All agents" → omit `--agent` flag
 
 ## Architecture Reference
 
@@ -85,15 +108,16 @@ cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@
 Each agent runs the full pipeline for its component area.
 
 ### DISCOVER (JIRA + Sippy + z-stream changelogs)
-- Three-tier version query:
+- 4-tier version query:
   - Tier 1: bugs tagged with target release (>= 4.21, < 4.22)
   - Tier 2: open bugs from older versions (unfixed, likely still present)
-  - Tier 3: bugs with no affectedVersion set
+  - Tier 3: open bugs from newer versions (if it exists on 5.0, it exists on 4.21 too)
+  - Tier 4: bugs with no affectedVersion set
 - Z-stream enrichment from OpenShift release controller (fix commits, images)
 - Neo4j dedup: already-analyzed bugs get status update only (zero LLM cost)
 
 ### FILTER (3-tier: keyword → semantic cache → LLM)
-- Layer 1: Keyword pre-filter (167 chaos keywords, 17 skip patterns). Zero tokens.
+- Layer 1: Keyword pre-filter (config/filters/common.yaml + agent overrides). Zero tokens.
 - Layer 2: Semantic cache in ChromaDB (cosine distance < 0.15). Zero tokens.
 - Layer 3: LLM classification via claude_code provider (--bare --system-prompt for minimal token usage ~2,700/call)
 - Confidence < 80 auto-escalates from Sonnet to Opus
@@ -120,19 +144,12 @@ Each agent runs the full pipeline for its component area.
 - Per-call token usage logged: `LLM CALL #N: X in + Y out = Z tokens, $cost`
 - Total usage logged at end: `TOKEN USAGE: X input + Y output = Z total, cost=$X, calls=N`
 
-### 6 Domain Agents (96 OCPBUGS components mapped):
-| Agent | Key Components |
-|-------|---------------|
-| control_plane | Etcd, kube-apiserver, kube-scheduler, HyperShift (7 variants), oauth, Pod Autoscaler |
-| networking | OVN-Kubernetes, DNS, router, SR-IOV, MetalLB, FRR-K8s, nmstate, DPU |
-| node_machine | Kubelet, CRI-O, Machine API, Bare Metal (6 sub-components), Cluster Autoscaler, RHCOS |
-| storage | Storage core, CSI drivers, Local Storage, Image Registry, LVMS, Secrets Store CSI |
-| operators_platform | OLM, Console, Monitoring, Auth, Insights, Cloud Compute (8 providers), oc CLI |
-| upgrade_lifecycle | CVO, MCO, Installer (10 variants), LCA, TALM, oc-mirror |
+### Pluggable Agents (auto-discovered from config/agents/*.yaml):
+Agents are discovered dynamically. Each YAML defines: name, components, filter keywords, doc sources.
 
 ### Knowledge Layer:
-- **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, filter cache
-- **Neo4j**: Operational memory — 3,000+ bugs, 465+ gaps, component relationships, run metrics
+- **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
+- **Neo4j**: Operational memory — 3,000+ bugs, 484+ gaps, component relationships, run metrics
 
 ## Targeted Query Pipeline Steps
 

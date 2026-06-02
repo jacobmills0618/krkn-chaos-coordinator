@@ -186,7 +186,7 @@ All configuration lives in `.env` (created by setup script). Full reference:
 ```bash
 cd ~/krkn-chaos-coordinator
 claude
-# Then type: /run-scan
+# Then type: /krkn-chaos-scan
 # Interactive: asks for OCP version + agent selection
 ```
 

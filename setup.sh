@@ -309,7 +309,7 @@ echo "    3. Run the coordinator:"
 echo -e "       ${CYAN}PYTHONPATH=. python src/main.py --release 4.21 --use-llm${NC}"
 echo ""
 echo "    Or use Claude Code:"
-echo -e "       ${CYAN}claude${NC}  →  type ${CYAN}/run-scan${NC}"
+echo -e "       ${CYAN}claude${NC}  →  type ${CYAN}/krkn-chaos-scan${NC}"
 echo ""
 
 if [ "$HAS_JIRA" = false ] || [ "$HAS_GITHUB" = false ]; then
