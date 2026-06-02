@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🔥 krkn-chaos-coordinator
+<img src="https://avatars.githubusercontent.com/u/104552024" width="120" alt="krkn logo"/>
+
+# krkn-chaos-coordinator
 
 **Autonomous chaos test coverage expansion for OpenShift**
 
