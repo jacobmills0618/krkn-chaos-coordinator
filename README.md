@@ -30,7 +30,7 @@ Orchestrator (dedup, approval queue)
 └── <your agent here>      (drop a YAML in config/agents/)
 ```
 
-Pluggable agents — auto-discovered from `config/agents/*.yaml`. 6 built-in agents covering 96 OCPBUGS components. Drop a YAML file to add a new domain.
+Pluggable agents — auto-discovered from `config/agents/*.yaml`. 6 built-in agents covering 113 OCPBUGS components. Drop a YAML file to add a new domain.
 
 ## Knowledge Layer
 

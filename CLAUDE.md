@@ -34,7 +34,7 @@ krkn-chaos-coordinator/
 │   │   ├── base_agent.py          # Base pipeline (DISCOVER→REMEMBER)
 │   │   └── registry.py            # Auto-discovers agents from config/agents/*.yaml
 │   ├── apis/
-│   │   ├── jira_client.py         # JIRA REST API (three-tier version query)
+│   │   ├── jira_client.py         # JIRA REST API (4-tier version query)
 │   │   ├── sippy_client.py        # Sippy public API client
 │   │   ├── github_client.py       # GitHub API client
 │   │   └── release_client.py      # Z-stream changelog enrichment
