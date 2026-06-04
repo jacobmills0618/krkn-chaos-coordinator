@@ -28,7 +28,7 @@ from src.models import (
     GapAnalysis, MatchResult, ScenarioMatch,
 )
 
-TARGET_OWNER = "shahsahil264"
+TARGET_OWNER = "krkn-chaos"
 TARGET_REPO = "krkn"
 
 HISTORY_FILE = Path("/tmp/krkn_coordinator_history.json")

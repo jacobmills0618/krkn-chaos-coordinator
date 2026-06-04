@@ -217,7 +217,7 @@ def _prompt_github_issues(gaps: list, github: GitHubClient) -> None:
         print("  No valid selections. Skipped.")
         return
 
-    owner = os.environ.get("GITHUB_FORK_OWNER", "shahsahil264")
+    owner = os.environ.get("GITHUB_FORK_OWNER", "krkn-chaos")
     repo = "krkn"
 
     try:

@@ -30,7 +30,7 @@ FORK_PATHS = {
     "release": Path.home() / "release",
 }
 
-FORK_OWNER = os.environ.get("GITHUB_FORK_OWNER", "shahsahil264")
+FORK_OWNER = os.environ.get("GITHUB_FORK_OWNER", "krkn-chaos")
 
 
 def _run_git(repo_path: Path, *args: str) -> tuple[int, str]:

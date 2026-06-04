@@ -53,7 +53,7 @@ Orchestrator (dedup, approval queue)
 ## Quick Start
 
 ```bash
-git clone https://github.com/shahsahil264/krkn-chaos-coordinator.git
+git clone https://github.com/krkn-chaos/krkn-chaos-coordinator.git
 cd krkn-chaos-coordinator
 ./setup.sh
 ```

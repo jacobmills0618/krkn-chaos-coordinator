@@ -190,4 +190,4 @@ PYTHONPATH=. python -m src.evals.filter_eval --sample-size 20 --provider claude_
 
 - Feature branches: `feat/<description>`
 - Conventional commits: `feat:`, `fix:`, `test:`, `docs:`
-- PRs from `shahsahil264/krkn-chaos-coordinator` → future `krkn-chaos/krkn-chaos-coordinator`
+- PRs target `krkn-chaos/krkn-chaos-coordinator`

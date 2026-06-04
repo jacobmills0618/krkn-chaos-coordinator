@@ -126,7 +126,7 @@ from src.apis.github_client import GitHubClient
 from src.agents.act import build_issue_title, build_issue_body, LABEL
 
 github = GitHubClient(token=os.environ.get('GITHUB_TOKEN', ''))
-owner = os.environ.get('GITHUB_FORK_OWNER', 'shahsahil264')
+owner = os.environ.get('GITHUB_FORK_OWNER', 'krkn-chaos')
 
 # For each approved gap, create the issue
 # Replace BUG_KEY, SUMMARY, COMPONENT, SCORE, REASONING with actual values
@@ -340,7 +340,7 @@ Recommendation:
 → [Approve] [Reject]
 ```
 
-When approved, create GitHub issue on `shahsahil264/krkn` with the full analysis.
+When approved, create GitHub issue on `krkn-chaos/krkn` with the full analysis.
 
 ### Step 6: REMEMBER
 
