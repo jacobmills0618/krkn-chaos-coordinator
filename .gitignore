@@ -13,3 +13,4 @@ chroma_data/
 coordinator_memory.json
 *.log
 .mcp.json
+docs/presentation.html
