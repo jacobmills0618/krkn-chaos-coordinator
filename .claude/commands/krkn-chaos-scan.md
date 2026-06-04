@@ -105,6 +105,39 @@ Map the user's interactive selections:
 - "14 days" → `--days 14`
 - "All agents" → omit `--agent` flag
 
+## After the Scan: Post Gaps to GitHub
+
+If the pipeline found gaps, present each one to the user and ask which to post as GitHub issues using AskUserQuestion:
+
+- Question: "Which gaps should I create as GitHub issues?"
+- multiSelect: true
+- Options: one per gap, showing "[CONFIDENCE SCORE] BUG_KEY: summary"
+- Plus "None — skip" option
+
+For each approved gap, use the `create_issues_for_gaps` function:
+```bash
+PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
+from dotenv import load_dotenv; load_dotenv()
+import os
+from src.apis.github_client import GitHubClient
+from src.agents.act import build_issue_title, build_issue_body, LABEL
+
+github = GitHubClient(token=os.environ.get('GITHUB_TOKEN', ''))
+owner = os.environ.get('GITHUB_FORK_OWNER', 'shahsahil264')
+
+# For each approved gap, create the issue
+# Replace BUG_KEY, SUMMARY, COMPONENT, SCORE, REASONING with actual values
+title = '[chaos-coordinator] [MEDIUM] OCPBUGS-XXXXX: summary here'
+body = '''## Chaos Test Coverage Gap
+...full body from build_issue_body...'''
+
+result = github.create_issue(owner=owner, repo='krkn', title=title, body=body, labels=[LABEL])
+print(f'Created: {result.get(\"html_url\", \"?\")}'  if result else 'Failed')
+"
+```
+
+Alternatively, if using main.py directly, the CLI will prompt interactively after the scan.
+
 ## Architecture Reference
 
 ### Pipeline: DISCOVER → FILTER → MAP → ANALYZE → ACT → REMEMBER

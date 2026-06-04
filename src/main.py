@@ -172,8 +172,69 @@ def main():
     print()
     if gaps:
         print(format_approval_queue(gaps))
+        _prompt_github_issues(gaps, github)
     else:
         print("No chaos test coverage gaps identified.")
+
+
+def _prompt_github_issues(gaps: list, github: GitHubClient) -> None:
+    """Prompt the user to select which gaps to post as GitHub issues."""
+    from src.agents.act import build_issue_title, build_issue_body, LABEL
+
+    print("\n" + "=" * 60)
+    print("Post gaps as GitHub issues?")
+    print("=" * 60)
+    print()
+    for i, gap in enumerate(gaps, 1):
+        level = gap.confidence_level.value.upper()
+        print(f"  {i}. [{level} {gap.confidence_score}/100] {gap.bug.key}: {gap.bug.summary[:60]}")
+    print()
+    print("  Enter numbers to post (e.g., '1,3'), 'all', or 'none':")
+
+    try:
+        choice = input("  → ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\n  Skipped.")
+        return
+
+    if choice in ("none", "n", ""):
+        print("  Skipped.")
+        return
+
+    if choice == "all":
+        selected = list(range(len(gaps)))
+    else:
+        try:
+            selected = [int(x.strip()) - 1 for x in choice.split(",")]
+            selected = [i for i in selected if 0 <= i < len(gaps)]
+        except ValueError:
+            print("  Invalid input. Skipped.")
+            return
+
+    if not selected:
+        print("  No valid selections. Skipped.")
+        return
+
+    owner = os.environ.get("GITHUB_FORK_OWNER", "shahsahil264")
+    repo = "krkn"
+
+    print(f"\n  Creating {len(selected)} issue(s) on {owner}/{repo}...")
+    for i in selected:
+        gap = gaps[i]
+        title = build_issue_title(gap)
+        body = build_issue_body(gap, agent_name="coordinator")
+
+        result = github.create_issue(
+            owner=owner,
+            repo=repo,
+            title=title,
+            body=body,
+            labels=[LABEL],
+        )
+        if result:
+            print(f"  ✓ {gap.bug.key}: {result.get('html_url', 'created')}")
+        else:
+            print(f"  ✗ {gap.bug.key}: failed to create issue")
 
 
 if __name__ == "__main__":
