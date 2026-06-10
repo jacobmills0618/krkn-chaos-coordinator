@@ -154,6 +154,8 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     lines.append("")
     lines.append(gap.bug.summary)
     lines.append("")
+    lines.append(f"**JIRA:** [{gap.bug.key}]({gap.bug.url})")
+    lines.append("")
     # Include first 500 chars of description if available
     if gap.bug.description and len(gap.bug.description) > 50:
         desc_preview = gap.bug.description[:500].replace("\n", " ").strip()
