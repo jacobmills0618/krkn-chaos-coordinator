@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import requests
 
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def load_project_env() -> None:
+    """Load .env from the project root (safe to call repeatedly)."""
+    from dotenv import load_dotenv
+
+    load_dotenv(_REPO_ROOT / ".env")
 
 
 class GitHubClient:

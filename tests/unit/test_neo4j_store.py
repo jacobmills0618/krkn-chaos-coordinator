@@ -397,3 +397,28 @@ class TestFakeRepoStoreRunMetrics:
         assert len(stored) == 2
         assert stored[0]["bugs_processed"] == 5
         assert stored[1]["bugs_processed"] == 12
+
+
+class TestNeo4jStoreEnvLoading:
+    def test_loads_password_from_env_via_project_dotenv(self, monkeypatch) -> None:
+        monkeypatch.delenv("NEO4J_PASSWORD", raising=False)
+
+        def _fake_load() -> None:
+            monkeypatch.setenv("NEO4J_PASSWORD", "from-dotenv")
+
+        monkeypatch.setattr(
+            "src.knowledge.neo4j_store.load_project_env",
+            _fake_load,
+        )
+
+        from src.knowledge.neo4j_store import Neo4jStore
+
+        store = Neo4jStore()
+        assert store._password == "from-dotenv"
+
+    def test_explicit_password_overrides_env(self, monkeypatch) -> None:
+        monkeypatch.setenv("NEO4J_PASSWORD", "from-env")
+        from src.knowledge.neo4j_store import Neo4jStore
+
+        store = Neo4jStore(password="explicit")
+        assert store._password == "explicit"

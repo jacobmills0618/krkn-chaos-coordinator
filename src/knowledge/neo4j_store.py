@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 
 from neo4j import GraphDatabase
 
+from src.apis.github_client import load_project_env
 from src.models import AgentResult, FilterResult, GapAnalysis
 
 logger = logging.getLogger(__name__)
@@ -26,8 +27,9 @@ class Neo4jStore:
         user: str = "neo4j",
         password: str | None = None,
     ):
-        self._uri = uri
-        self._user = user
+        load_project_env()
+        self._uri = os.environ.get("NEO4J_URI", uri)
+        self._user = os.environ.get("NEO4J_USER", user)
         resolved_password = password or os.environ.get("NEO4J_PASSWORD")
         if not resolved_password:
             raise ValueError(
