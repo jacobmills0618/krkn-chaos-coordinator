@@ -191,24 +191,25 @@ Agents are discovered dynamically. Each YAML defines: name, components, filter k
 - **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
 - **Neo4j**: Operational memory — 3,000+ bugs, 484+ gaps, component relationships, run metrics
 
-### Neo4j graph schema (exact property names — do NOT guess)
+### Neo4j: helpers first, custom Cypher last (MANDATORY)
 
-| Node | Key properties |
-|------|----------------|
-| `Bug` | `key`, `summary`, `status`, `chaos_relevant` (bool), `skip_reason` (filtered only) |
-| `Gap` | `id`, `confidence`, `status` (`open`/`resolved`), `reasoning`, `agent` |
+When answering **any** Neo4j question during a scan:
 
-**Do NOT use:** `is_chaos_relevant`, `filter_decision` — these do not exist. Use `chaos_relevant` and `skip_reason`.
+1. **Check `Neo4jStore.describe_schema()['helper_catalog']`** — pick a helper that matches the question.
+2. **Call that helper** — do NOT write `MATCH ...` Cypher if a helper exists.
+3. **Custom `n.query()` ONLY when** no helper covers the question AND you printed `describe_schema()` first.
+4. **Never invent** property or relationship names (e.g. no `IDENTIFIES_GAP_IN`, no `is_chaos_relevant`).
 
-**Before custom Cypher:** `print(Neo4jStore.describe_schema())` — lists property names and method aliases.
-
-**Custom Cypher:** `n.query('MATCH ... RETURN ...')` (aliases like `run_query`, `execute`, `run_cypher` also work)
-
-**Prefer typed helpers** (no property names to guess):
-- `n.get_gap_overview()` — standard scan summary (open gaps, counts, top components/agents)
-- `n.get_skipped_bugs()` — bugs filtered out as not chaos-relevant
-- `n.get_chaos_relevant_bugs()` — bugs that passed FILTER
-- `n.get_open_gaps()`, `n.get_component_gap_counts()`, `n.get_similar_resolved_bugs(component)`
+| Scan question | Use this helper — NOT custom Cypher |
+|---------------|-----------------------------------|
+| Knowledge base overview / summary stats | `n.get_gap_overview()` |
+| List open gaps | `n.get_open_gaps()` |
+| Gaps by component / most open gaps | `n.get_component_gap_counts()` |
+| Gaps by agent | `n.get_agent_gap_counts()` |
+| Skipped / filtered bugs | `n.get_skipped_bugs()` |
+| Chaos-relevant bugs | `n.get_chaos_relevant_bugs()` |
+| Similar resolved bugs | `n.get_similar_resolved_bugs('Component')` |
+| Past scan runs | `n.get_run_history()` |
 
 **Standard overview script** (copy this pattern — helpers only):
 ```bash
@@ -228,6 +229,20 @@ for row in overview['gaps_by_agent'][:5]:
 n.close()
 "
 ```
+
+### Neo4j graph schema (exact names — do NOT guess)
+
+| Node | Key properties |
+|------|----------------|
+| `Bug` | `key`, `summary`, `status`, `chaos_relevant` (bool), `skip_reason` (filtered only) |
+| `Gap` | `id`, `confidence`, `status` (`open`/`resolved`), `reasoning`, `agent` |
+
+**Relationships (exact):** `(Bug)-[:HAS_GAP]->(Gap)` — not `IDENTIFIES_GAP_IN`.
+
+**Do NOT use:** `is_chaos_relevant`, `filter_decision`, `IDENTIFIES_GAP_IN`.
+
+**Last resort only:** `n.query('MATCH ... RETURN ...')` after `print(Neo4jStore.describe_schema())`.
+Method aliases (`run_query`, `execute`, etc.) forward to `query()`.
 
 ## Targeted Query Pipeline Steps
 
@@ -397,7 +412,8 @@ n.close()
 ## Key Principles
 
 1. **READ before deciding** — don't pattern match, actually understand the bug
-2. **SEARCH before recommending** — check what krkn already has, what OCP docs say
-3. **BE SPECIFIC** — don't say "extend this scenario", say exactly what to change
-4. **BE HONEST** — if you don't understand the component, say LOW confidence
-5. **CHECK HISTORY** — Neo4j tells you what was solved before
+2. **Neo4j helpers before Cypher** — use `get_gap_overview()` / `helper_catalog`; custom Cypher is last resort
+3. **SEARCH before recommending** — check what krkn already has, what OCP docs say
+4. **BE SPECIFIC** — don't say "extend this scenario", say exactly what to change
+5. **BE HONEST** — if you don't understand the component, say LOW confidence
+6. **CHECK HISTORY** — Neo4j tells you what was solved before (use helpers, not guessed Cypher)

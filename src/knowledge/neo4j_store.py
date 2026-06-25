@@ -64,6 +64,28 @@ INVALID_BUG_PROPERTIES = {
     "filter_decision_reason": "use skip_reason",
 }
 
+# Common LLM guesses that do NOT exist — Bug connects to Gap via HAS_GAP
+INVALID_RELATIONSHIPS = {
+    "IDENTIFIES_GAP_IN": "use (Bug)-[:HAS_GAP]->(Gap)",
+    "GAP_FOR": "use (Bug)-[:HAS_GAP]->(Gap)",
+    "HAS_BUG_GAP": "use (Bug)-[:HAS_GAP]->(Gap)",
+    "IDENTIFIES": "use (Bug)-[:HAS_GAP]->(Gap)",
+}
+
+# Prefer these helpers during scans — do not write custom Cypher if one applies.
+NEO4J_HELPER_CATALOG: dict[str, str] = {
+    "open gaps / gap list / knowledge base overview": "get_gap_overview()",
+    "open gaps (detailed rows)": "get_open_gaps()",
+    "gaps by component / most open gaps": "get_component_gap_counts()",
+    "gaps by agent / agent stats": "get_agent_gap_counts()",
+    "skipped or filtered bugs": "get_skipped_bugs()",
+    "chaos-relevant bugs": "get_chaos_relevant_bugs()",
+    "similar resolved bugs for a component": "get_similar_resolved_bugs(component)",
+    "run history / past scans": "get_run_history()",
+    "already-analyzed bug keys": "get_analyzed_bug_keys()",
+    "run metrics trends": "get_metrics_history()",
+}
+
 # LLM-friendly method aliases — convenience only; canonical names are the values.
 METHOD_ALIASES: dict[str, str] = {
     # query()
@@ -148,12 +170,21 @@ class Neo4jStore:
             "nodes": GRAPH_NODE_PROPERTIES,
             "relationships": GRAPH_RELATIONSHIPS,
             "invalid_property_names": INVALID_BUG_PROPERTIES,
+            "invalid_relationships": INVALID_RELATIONSHIPS,
+            "helper_catalog": NEO4J_HELPER_CATALOG,
+            "query_policy": (
+                "Use helper_catalog methods first. Custom n.query() only when no "
+                "helper applies — call describe_schema() first and copy relationship "
+                "names exactly from relationships."
+            ),
             "canonical_methods": {
                 "get_gap_overview": "standard scan summary (open gaps, counts, top components/agents)",
+                "get_open_gaps": "returns bug_key, id, summary, confidence, reasoning, agent",
                 "get_agent_gap_counts": "returns agent, gaps, open_gaps, resolved_gaps",
-                "query": "run arbitrary Cypher (requires connect())",
+                "get_component_gap_counts": "gap counts grouped by component",
                 "get_skipped_bugs": "bugs filtered out in FILTER",
                 "get_chaos_relevant_bugs": "bugs that passed FILTER",
+                "query": "custom Cypher — last resort only",
                 "describe_schema": "this schema reference",
             },
             "method_aliases": METHOD_ALIASES,
@@ -386,9 +417,9 @@ class Neo4jStore:
             r = session.run(
                 """
                 MATCH (b:Bug)-[:HAS_GAP]->(g:Gap {status: 'open'})
-                RETURN b.key AS bug_key, b.summary AS summary,
-                       g.confidence AS confidence, g.reasoning AS reasoning,
-                       g.opened_at AS opened_at
+                RETURN b.key AS bug_key, g.id AS id, b.summary AS summary,
+                       g.confidence AS confidence, g.confidence_level AS confidence_level,
+                       g.reasoning AS reasoning, g.opened_at AS opened_at, g.agent AS agent
                 ORDER BY g.confidence DESC
                 """
             )

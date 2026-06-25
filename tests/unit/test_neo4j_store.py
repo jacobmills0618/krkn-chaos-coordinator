@@ -442,7 +442,27 @@ class TestNeo4jStoreSchema:
         assert "chaos_relevant" in schema["nodes"]["Bug"]
         assert "skip_reason" in schema["nodes"]["Bug"]
         assert "is_chaos_relevant" in schema["invalid_property_names"]
+        assert "IDENTIFIES_GAP_IN" in schema["invalid_relationships"]
+        assert "get_gap_overview()" in schema["helper_catalog"]["open gaps / gap list / knowledge base overview"]
         assert schema["method_aliases"]["run_query"] == "query"
+
+    def test_get_agent_gap_counts_queries_open_gaps_by_agent(self, monkeypatch) -> None:
+        monkeypatch.setenv("NEO4J_PASSWORD", "test")
+        from src.knowledge.neo4j_store import Neo4jStore
+
+        store = Neo4jStore()
+        captured: list[str] = []
+
+        def fake_query(cypher: str, **params) -> list[dict]:
+            captured.append(cypher)
+            return []
+
+        monkeypatch.setattr(store, "query", fake_query)
+        store.get_agent_gap_counts()
+        assert captured
+        assert "g.agent AS agent" in captured[0]
+        assert "AS gaps" in captured[0]
+        assert "AS open_gaps" in captured[0]
 
     @pytest.mark.parametrize(
         "alias",
@@ -492,20 +512,3 @@ class TestNeo4jStoreSchema:
         assert "chaos_relevant = false" in captured[0]
         assert "skip_reason" in captured[0]
         assert "is_chaos_relevant" not in captured[0]
-
-    def test_get_gap_overview_uses_helpers(self, monkeypatch) -> None:
-        monkeypatch.setenv("NEO4J_PASSWORD", "test")
-        from src.knowledge.neo4j_store import Neo4jStore
-
-        store = Neo4jStore()
-        monkeypatch.setattr(store, "get_open_gaps", lambda: [{"bug_key": "OCP-1", "confidence": 80, "summary": "s"}])
-        monkeypatch.setattr(store, "get_component_gap_counts", lambda: [{"component": "Etcd", "gaps": 2, "open_gaps": 1}])
-        monkeypatch.setattr(store, "get_agent_gap_counts", lambda: [{"agent": "control_plane", "gaps": 3, "open_gaps": 1, "resolved_gaps": 2}])
-        monkeypatch.setattr(store, "get_skipped_bugs", lambda: [1, 2])
-        monkeypatch.setattr(store, "get_chaos_relevant_bugs", lambda: [1])
-        monkeypatch.setattr(store, "get_analyzed_bug_keys", lambda: {"OCP-1"})
-
-        overview = store.get_gap_overview(limit=5)
-        assert overview["open_gaps"][0]["bug_key"] == "OCP-1"
-        assert overview["skipped_bug_count"] == 2
-        assert overview["analyzed_bug_count"] == 1
