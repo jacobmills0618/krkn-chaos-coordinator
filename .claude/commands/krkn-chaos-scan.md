@@ -191,6 +191,24 @@ Agents are discovered dynamically. Each YAML defines: name, components, filter k
 - **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
 - **Neo4j**: Operational memory — 3,000+ bugs, 484+ gaps, component relationships, run metrics
 
+### Neo4j graph schema (exact property names — do NOT guess)
+
+| Node | Key properties |
+|------|----------------|
+| `Bug` | `key`, `summary`, `status`, `chaos_relevant` (bool), `skip_reason` (filtered only) |
+| `Gap` | `id`, `confidence`, `status` (`open`/`resolved`), `reasoning`, `agent` |
+
+**Do NOT use:** `is_chaos_relevant`, `filter_decision` — these do not exist. Use `chaos_relevant` and `skip_reason`.
+
+**Before custom Cypher:** `print(Neo4jStore.describe_schema())` — lists property names and method aliases.
+
+**Custom Cypher:** `n.query('MATCH ... RETURN ...')` (aliases like `run_query`, `execute`, `run_cypher` also work)
+
+**Prefer typed helpers** (no property names to guess):
+- `n.get_skipped_bugs()` — bugs filtered out as not chaos-relevant
+- `n.get_chaos_relevant_bugs()` — bugs that passed FILTER
+- `n.get_open_gaps()`, `n.get_component_gap_counts()`, `n.get_similar_resolved_bugs(component)`
+
 ## Targeted Query Pipeline Steps
 
 ### Step 1: DISCOVER
@@ -281,7 +299,7 @@ for r in c.search_krkn_docs('PUT_FAILURE_MODE_HERE', n_results=3):
 "
 ```
 
-**4b. Check Neo4j for similar resolved bugs:**
+**4b. Check Neo4j for similar resolved bugs and filtered bugs:**
 ```bash
 PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.knowledge.neo4j_store import Neo4jStore
@@ -290,6 +308,7 @@ for s in n.get_similar_resolved_bugs('PUT_COMPONENT_NAME'):
     print(f'{s[\"bug_key\"]}: {s[\"summary\"][:60]} → {s[\"issue_url\"]}')
 for g in n.get_component_gap_counts()[:5]:
     print(f'{g[\"component\"]}: {g[\"gaps\"]} gaps ({g[\"open_gaps\"]} open)')
+print(f'Skipped bugs: {len(n.get_skipped_bugs())}')
 n.close()
 "
 ```

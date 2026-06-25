@@ -17,6 +17,80 @@ from src.models import AgentResult, FilterResult, GapAnalysis
 
 logger = logging.getLogger(__name__)
 
+# Authoritative node properties — use describe_schema() instead of guessing names.
+GRAPH_NODE_PROPERTIES: dict[str, list[str]] = {
+    "Bug": [
+        "key", "summary", "priority", "status", "url", "description",
+        "all_components", "created", "first_seen", "last_seen",
+        "fixed_in_release", "fix_image", "fix_commits",
+        "chaos_relevant",  # bool: true = passed FILTER, false = filtered out
+        "skip_reason",     # str: why filtered out (when chaos_relevant=false)
+    ],
+    "Gap": [
+        "id", "confidence", "confidence_level", "action_type", "reasoning",
+        "base_scenario", "status", "opened_at", "resolved_at", "agent",
+    ],
+    "Component": ["name"],
+    "Run": [
+        "id", "agent", "timestamp", "bugs_discovered", "bugs_filtered",
+        "bugs_matched", "gaps_found",
+    ],
+    "Agent": ["name"],
+    "Action": ["type", "url", "created_at"],
+    "Finding": ["id", "text", "created_at"],
+    "RunMetrics": [
+        "created_at", "bugs_processed", "bugs_succeeded",
+        "filter_retries", "filter_escalations", "map_fallbacks", "analyze_retries",
+        "total_input_tokens", "total_output_tokens",
+        "keyword_filter_hits", "semantic_cache_hits",
+        "llm_filter_calls", "llm_map_calls", "llm_analyze_calls",
+        "filter_duration_sec", "map_duration_sec", "analyze_duration_sec",
+    ],
+}
+
+GRAPH_RELATIONSHIPS = [
+    "(Component)-[:HAS_BUG]->(Bug)",
+    "(Bug)-[:HAS_GAP]->(Gap)",
+    "(Gap)-[:RESOLVED_BY]->(Action)",
+    "(Agent)-[:PERFORMED]->(Run)",
+    "(Run)-[:HAS_METRICS]->(RunMetrics)",
+    "(Agent)-[:LEARNED]->(Finding)",
+]
+
+# Common LLM guesses that do NOT exist on Bug nodes
+INVALID_BUG_PROPERTIES = {
+    "is_chaos_relevant": "use chaos_relevant",
+    "filter_decision": "use chaos_relevant and skip_reason",
+    "filter_decision_reason": "use skip_reason",
+}
+
+# LLM-friendly method aliases — convenience only; canonical names are the values.
+METHOD_ALIASES: dict[str, str] = {
+    # query()
+    "run_query": "query",
+    "execute_query": "query",
+    "execute": "query",
+    "run_cypher": "query",
+    "cypher_query": "query",
+    # get_skipped_bugs()
+    "get_filtered_bugs": "get_skipped_bugs",
+    "get_filter_skipped_bugs": "get_skipped_bugs",
+    # get_chaos_relevant_bugs()
+    "get_relevant_bugs": "get_chaos_relevant_bugs",
+    "get_chaos_bugs": "get_chaos_relevant_bugs",
+    # describe_schema()
+    "get_schema": "describe_schema",
+}
+
+
+def _forwarding_method(canonical: str, alias: str):
+    def method(self, *args, **kwargs):
+        return getattr(self, canonical)(*args, **kwargs)
+
+    method.__name__ = alias
+    method.__doc__ = f"Alias for {canonical}(). Convenience for LLM-generated scripts."
+    return method
+
 
 class Neo4jStore:
     """Direct Neo4j knowledge graph — sync driver, no LLM."""
@@ -55,6 +129,58 @@ class Neo4jStore:
         except Exception as e:
             logger.error("Neo4j connection failed (unexpected): %s: %s", type(e).__name__, e)
             return False
+
+    def query(self, cypher: str, **params) -> list[dict]:
+        """Run a Cypher query and return rows as dicts.
+
+        Requires connect() first. Keys match Cypher RETURN aliases
+        (e.g. ``RETURN b.key AS key`` → ``{\"key\": ...}``).
+        """
+        if not self._driver:
+            raise RuntimeError("Not connected. Call connect() first.")
+        with self._driver.session() as session:
+            return [dict(record) for record in session.run(cypher, **params)]
+
+    @staticmethod
+    def describe_schema() -> dict:
+        """Return the graph schema. Call before writing custom Cypher."""
+        return {
+            "nodes": GRAPH_NODE_PROPERTIES,
+            "relationships": GRAPH_RELATIONSHIPS,
+            "invalid_property_names": INVALID_BUG_PROPERTIES,
+            "canonical_methods": {
+                "query": "run arbitrary Cypher (requires connect())",
+                "get_skipped_bugs": "bugs filtered out in FILTER",
+                "get_chaos_relevant_bugs": "bugs that passed FILTER",
+                "describe_schema": "this schema reference",
+            },
+            "method_aliases": METHOD_ALIASES,
+        }
+
+    def get_skipped_bugs(self) -> list[dict]:
+        """Bugs filtered out as not chaos-relevant (FILTER phase)."""
+        return self.query(
+            """
+            MATCH (b:Bug)
+            WHERE b.chaos_relevant = false AND b.skip_reason IS NOT NULL
+            RETURN b.key AS key, b.summary AS summary,
+                   b.all_components AS all_components,
+                   b.skip_reason AS skip_reason, b.status AS status
+            ORDER BY b.key
+            """
+        )
+
+    def get_chaos_relevant_bugs(self) -> list[dict]:
+        """Bugs that passed FILTER as chaos-relevant."""
+        return self.query(
+            """
+            MATCH (b:Bug)
+            WHERE b.chaos_relevant = true
+            RETURN b.key AS key, b.summary AS summary,
+                   b.all_components AS all_components, b.status AS status
+            ORDER BY b.key
+            """
+        )
 
     def _create_schema(self) -> None:
         queries = [
@@ -490,3 +616,10 @@ class Neo4jStore:
     def close(self) -> None:
         if self._driver:
             self._driver.close()
+
+
+for _alias, _canonical in METHOD_ALIASES.items():
+    if _canonical == "describe_schema":
+        setattr(Neo4jStore, _alias, Neo4jStore.describe_schema)
+    else:
+        setattr(Neo4jStore, _alias, _forwarding_method(_canonical, _alias))
