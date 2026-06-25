@@ -91,3 +91,24 @@ def _extract_description(config: dict) -> str:
     if "scenario_type" in config:
         parts.append(f"type={config['scenario_type']}")
     return ", ".join(parts)
+
+
+def scenario_github_url(
+    path: str | None,
+    repo: str = "krkn-chaos/krkn",
+    branch: str = "main",
+) -> str | None:
+    """Build a GitHub blob URL for a krkn scenario YAML path.
+
+    Expects repo-relative paths as produced by index_scenarios_from_repo
+    (e.g. ``scenarios/openshift/etcd.yml``) or Chroma ingest
+    (``Scenario file: scenarios/...``).
+    """
+    if not path:
+        return None
+    if path.startswith("http://") or path.startswith("https://"):
+        return path
+    normalized = path.lstrip("/")
+    if not normalized.startswith("scenarios/"):
+        return None
+    return f"https://github.com/{repo}/blob/{branch}/{normalized}"

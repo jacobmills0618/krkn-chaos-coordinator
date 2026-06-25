@@ -3,18 +3,31 @@
 from __future__ import annotations
 
 import logging
+import os
+from pathlib import Path
 
 import requests
 
 logger = logging.getLogger(__name__)
 
 GITHUB_API = "https://api.github.com"
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_project_env() -> None:
+    """Load .env from the project root (safe to call repeatedly)."""
+    from dotenv import load_dotenv
+
+    load_dotenv(_REPO_ROOT / ".env")
 
 
 class GitHubClient:
     """Read krkn-chaos repos and create PRs/issues."""
 
-    def __init__(self, token: str):
+    def __init__(self, token: str = ""):
+        if not token:
+            load_project_env()
+            token = os.environ.get("GITHUB_TOKEN", "")
         self._session = requests.Session()
         self._session.headers.update(
             {
@@ -22,6 +35,15 @@ class GitHubClient:
                 "Accept": "application/vnd.github.v3+json",
             }
         )
+
+    @classmethod
+    def from_env(cls) -> GitHubClient:
+        """Create a client using GITHUB_TOKEN from the project .env file."""
+        load_project_env()
+        token = os.environ.get("GITHUB_TOKEN", "")
+        if not token:
+            raise ValueError("GITHUB_TOKEN is not set in .env or environment")
+        return cls(token)
 
     def list_scenario_files(self, owner: str, repo: str, path: str = "scenarios") -> list[dict]:
         """List scenario YAML files in a krkn repo."""

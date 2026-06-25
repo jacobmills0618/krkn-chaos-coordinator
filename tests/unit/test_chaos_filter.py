@@ -177,3 +177,13 @@ class TestFilterBugs:
         relevant, skipped = filter_bugs([])
         assert relevant == []
         assert skipped == []
+
+
+class TestFilterKeywordEncoding:
+    def test_common_yaml_keywords_use_straight_quotes(self):
+        """Curly Unicode quotes are literal chars and will never match bug text."""
+        from pathlib import Path
+
+        text = Path("config/filters/common.yaml").read_text(encoding="utf-8")
+        assert "\u201c" not in text, "found left curly quote in common.yaml"
+        assert "\u201d" not in text, "found right curly quote in common.yaml"

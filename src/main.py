@@ -179,9 +179,9 @@ def main():
         print("No chaos test coverage gaps identified.")
 
 
-def _prompt_github_issues(gaps: list, github: GitHubClient) -> None:
+def _prompt_github_issues(gaps: list, github: GitHubClient | None) -> None:
     """Prompt the user to select which gaps to post as GitHub issues."""
-    from src.agents.act import build_issue_title, build_issue_body, LABEL
+    from src.agents.act import create_issues_for_gaps
 
     print("\n" + "=" * 60)
     print("Post gaps as GitHub issues?")
@@ -217,29 +217,18 @@ def _prompt_github_issues(gaps: list, github: GitHubClient) -> None:
         print("  No valid selections. Skipped.")
         return
 
-    owner = os.environ.get("GITHUB_FORK_OWNER", "krkn-chaos")
-    repo = "krkn"
-
     try:
-        print(f"\n  Creating {len(selected)} issue(s) on {owner}/{repo}...")
-        for i in selected:
-            gap = gaps[i]
-            title = build_issue_title(gap)
-            body = build_issue_body(gap, agent_name="coordinator")
-
-            result = github.create_issue(
-                owner=owner,
-                repo=repo,
-                title=title,
-                body=body,
-                labels=[LABEL],
-            )
-            if result:
-                print(f"  ✓ {gap.bug.key}: {result.get('html_url', 'created')}")
-            else:
-                print(f"  ✗ {gap.bug.key}: failed to create issue")
+        print(f"\n  Creating {len(selected)} issue(s)...")
+        create_issues_for_gaps(
+            github=github,
+            gaps=[gaps[i] for i in selected],
+            agent_name="coordinator",
+            dry_run=False,
+        )
     except KeyboardInterrupt:
         print("\n  Issue creation interrupted.")
+    except ValueError as e:
+        print(f"  ✗ {e}")
 
 
 if __name__ == "__main__":

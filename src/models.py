@@ -19,6 +19,10 @@ class Confidence(Enum):
     LOW = "low"        # 0-39: GitHub issue describing gap
 
 
+# Backward-compatible alias used by some LLM-generated scripts
+ConfidenceLevel = Confidence
+
+
 class ActionType(Enum):
     DRAFT_PR = "draft_pr"
     GITHUB_ISSUE = "github_issue"
@@ -45,6 +49,13 @@ class Bug:
     fixed_in_release: str | None = None  # e.g. "4.21.6" if shipped in a z-stream
     fix_commits: tuple[str, ...] = ()    # Commit messages that fixed this bug
     fix_image: str | None = None         # Image that was updated (e.g. "machine-config-operator")
+    release_version: str | None = None   # LLM alias for fixed_in_release (ignored if fixed_in_release set)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.created, str):
+            object.__setattr__(self, "created", str(self.created))
+        if self.release_version and not self.fixed_in_release:
+            object.__setattr__(self, "fixed_in_release", self.release_version)
 
 
 @dataclass(frozen=True)
@@ -86,6 +97,22 @@ class GapAnalysis:
     reasoning: str = ""
     base_scenario: str | None = None
     modifications: list[str] = field(default_factory=list)
+    # Optional metadata from ANALYZE / LLM output (not required for issue creation)
+    agent: str | None = None
+    krkn_plugin: str | None = None
+    repos_to_update: str | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.modifications, str):
+            object.__setattr__(self, "modifications", [self.modifications])
+        if isinstance(self.confidence_level, str):
+            object.__setattr__(
+                self, "confidence_level", Confidence(self.confidence_level.lower())
+            )
+        if isinstance(self.action_type, str):
+            object.__setattr__(
+                self, "action_type", ActionType(self.action_type.lower())
+            )
 
 
 @dataclass(frozen=True)
