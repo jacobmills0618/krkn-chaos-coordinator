@@ -149,6 +149,8 @@ class Neo4jStore:
             "relationships": GRAPH_RELATIONSHIPS,
             "invalid_property_names": INVALID_BUG_PROPERTIES,
             "canonical_methods": {
+                "get_gap_overview": "standard scan summary (open gaps, counts, top components/agents)",
+                "get_agent_gap_counts": "returns agent, gaps, open_gaps, resolved_gaps",
                 "query": "run arbitrary Cypher (requires connect())",
                 "get_skipped_bugs": "bugs filtered out in FILTER",
                 "get_chaos_relevant_bugs": "bugs that passed FILTER",
@@ -393,6 +395,31 @@ class Neo4jStore:
             return [dict(record) for record in r]
 
     get_open_gaps_sync = get_open_gaps
+
+    def get_agent_gap_counts(self) -> list[dict]:
+        """Gap counts grouped by agent (open, resolved, total)."""
+        return self.query(
+            """
+            MATCH (g:Gap)
+            WHERE g.agent IS NOT NULL
+            RETURN g.agent AS agent,
+                   count(g) AS gaps,
+                   sum(CASE WHEN g.status = 'open' THEN 1 ELSE 0 END) AS open_gaps,
+                   sum(CASE WHEN g.status = 'resolved' THEN 1 ELSE 0 END) AS resolved_gaps
+            ORDER BY gaps DESC
+            """
+        )
+
+    def get_gap_overview(self, limit: int = 10) -> dict:
+        """Standard Neo4j summary for scans — prefer over custom Cypher."""
+        return {
+            "open_gaps": self.get_open_gaps()[:limit],
+            "gaps_by_component": self.get_component_gap_counts()[:limit],
+            "gaps_by_agent": self.get_agent_gap_counts(),
+            "skipped_bug_count": len(self.get_skipped_bugs()),
+            "chaos_relevant_bug_count": len(self.get_chaos_relevant_bugs()),
+            "analyzed_bug_count": len(self.get_analyzed_bug_keys()),
+        }
 
     def get_component_gap_counts(self) -> list[dict]:
         with self._driver.session() as session:

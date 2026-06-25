@@ -205,9 +205,29 @@ Agents are discovered dynamically. Each YAML defines: name, components, filter k
 **Custom Cypher:** `n.query('MATCH ... RETURN ...')` (aliases like `run_query`, `execute`, `run_cypher` also work)
 
 **Prefer typed helpers** (no property names to guess):
+- `n.get_gap_overview()` — standard scan summary (open gaps, counts, top components/agents)
 - `n.get_skipped_bugs()` — bugs filtered out as not chaos-relevant
 - `n.get_chaos_relevant_bugs()` — bugs that passed FILTER
 - `n.get_open_gaps()`, `n.get_component_gap_counts()`, `n.get_similar_resolved_bugs(component)`
+
+**Standard overview script** (copy this pattern — helpers only):
+```bash
+PYTHONPATH=. python -c "
+from src.knowledge.neo4j_store import Neo4jStore
+n = Neo4jStore(); n.connect()
+overview = n.get_gap_overview(limit=10)
+print('Analyzed bugs:', overview['analyzed_bug_count'])
+print('Skipped:', overview['skipped_bug_count'], '| Chaos-relevant:', overview['chaos_relevant_bug_count'])
+print('Open gaps:', len(overview['open_gaps']))
+for i, gap in enumerate(overview['open_gaps'], 1):
+    print(f\"  {i}. [{gap['confidence']}/100] {gap['bug_key']}: {gap['summary'][:60]}\")
+for row in overview['gaps_by_component'][:5]:
+    print(f\"  {row['component']}: {row['open_gaps']} open / {row['gaps']} total\")
+for row in overview['gaps_by_agent'][:5]:
+    print(f\"  {row['agent']}: {row['open_gaps']} open / {row['gaps']} total\")
+n.close()
+"
+```
 
 ## Targeted Query Pipeline Steps
 
