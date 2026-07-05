@@ -47,6 +47,42 @@ def _infer_failure_mode(gap: GapAnalysis) -> str:
     return "Component failure under adverse conditions"
 
 
+# Plugin directory -> config.yaml scenario_type (krkn/scenario_plugins/<dir>/)
+# See https://krkn-chaos.dev/docs/scenarios/
+PLUGIN_REGISTRY: dict[str, str] = {
+    "application_outage": "application_outages_scenarios",
+    "container": "container_scenarios",
+    "hogs": "hog_scenarios",
+    "http_load": "http_load_scenarios",
+    "kubevirt_vm_outage": "kubevirt_vm_outage",
+    "managed_cluster": "managedcluster_scenarios",
+    "network_chaos": "network_chaos_scenarios",
+    "network_chaos_ng": "network_chaos_ng_scenarios",
+    "node_actions": "node_scenarios",
+    "pod_disruption": "pod_disruption_scenarios",
+    "pvc": "pvc_scenarios",
+    "service_disruption": "service_disruption_scenarios",
+    "service_hijacking": "service_hijacking_scenarios",
+    "shut_down": "cluster_shut_down_scenarios",
+    "storage_throttle": "storage_throttle_scenarios",
+    "syn_flood": "syn_flood_scenarios",
+    "time_actions": "time_scenarios",
+    "zone_outage": "zone_outages_scenarios",
+}
+
+
+
+def _scenario_type_from_plugin(plugin: str) -> str:
+    """Resolve scenario type from a plugin path or legacy 'name (type)' string."""
+    if plugin.startswith("krkn/scenario_plugins/"):
+        plugin_dir = plugin.removeprefix("krkn/scenario_plugins/").strip("/")
+        return PLUGIN_REGISTRY.get(plugin_dir, "pod_disruption_scenarios")
+    # legacy fallback during transition
+    if " (" in plugin and plugin.endswith(")"):
+        return plugin.split(" (", 1)[1].rstrip(")")
+    return PLUGIN_REGISTRY.get(plugin, "pod_disruption_scenarios")
+
+
 def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
     """Infer the krkn injection method, plugin, and how to configure it.
 
