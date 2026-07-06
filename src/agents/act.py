@@ -32,16 +32,44 @@ def _infer_failure_mode(gap: GapAnalysis) -> str:
     desc = gap.bug.description.lower() if gap.bug.description else ""
     text = f"{summary} {desc}"
 
+    if "kubevirt" in text or "virt-launcher" in text or "vm migration" in text:
+        return "KubeVirt VM disruption causes workload failure"
+    if "managedcluster" in text or "klusterlet" in text or "multicluster" in text:
+        return "Managed cluster disconnect causes hub visibility loss"
+    if "zone outage" in text or "availability zone" in text:
+        return "Availability zone outage causes regional infrastructure failure"
+    if "cluster shut down" in text or "cluster shutdown" in text:
+        return "Full cluster shutdown causes extended unavailability"
+    if "clock skew" in text or "time skew" in text or "ntp drift" in text:
+        return "Clock skew causes time-sensitive component misbehavior"
+    if "storage throttle" in text or "iops limit" in text or "disk throttle" in text:
+        return "Storage I/O throttling causes degraded disk performance"
+    if "disk full" in text or "out of space" in text or "pvc full" in text:
+        return "PVC exhaustion causes out-of-disk failure"
+    if "syn flood" in text or "syn-flood" in text or "hping" in text:
+        return "SYN flood attack overwhelms target service"
+    if "service hijack" in text or "service hijacking" in text:
+        return "Service hijacking causes incorrect responses to clients"
+    if "service disruption" in text:
+        return "Service disruption causes application unavailability"
+    if "application outage" in text or "route inaccessible" in text:
+        return "Application route outage blocks ingress/egress traffic"
+    if "http load" in text or "load test" in text or "request rate" in text:
+        return "HTTP load saturation causes endpoint degradation"
+    if "container kill" in text or "kill container" in text:
+        return "Container kill disrupts pod workload"
+    if "pod network" in text or "network filter" in text or "interface down" in text:
+        return "Pod-level network filtering causes connectivity degradation"
     if "node delete" in text or "node replace" in text or "same-name" in text:
         return "Node replacement / same-name recreation causes stale state"
-    if "throttl" in text or "load" in text or "timeout" in text:
+    if "throttl" in text or "api server load" in text or "resource pressure" in text:
         return "Component degrades or reports incorrect status under resource pressure"
-    if "upgrade" in text or "duplicate member" in text:
+    if "upgrade" in text or "rollback" in text or "duplicate member" in text:
         return "Upgrade path causes inconsistent cluster state"
-    if "quorum" in text or "leader election" in text:
-        return "Cluster consensus / leader election failure"
-    if "network" in text or "partition" in text:
+    if "network" in text or "partition" in text or "latency" in text:
         return "Network disruption causes component failure"
+    if "quorum" in text or "leader" in text or "etcd" in text:
+        return "Cluster consensus / leader election failure"
     if "crash" in text or "restart" in text or "loop" in text:
         return "Component enters crash/restart loop under failure conditions"
     return "Component failure under adverse conditions"
@@ -72,6 +100,10 @@ PLUGIN_REGISTRY: dict[str, str] = {
 
 
 
+def _plugin_path(plugin_dir: str) -> str:
+    return f"krkn/scenario_plugins/{plugin_dir}/"
+
+
 def _scenario_type_from_plugin(plugin: str) -> str:
     """Resolve scenario type from a plugin path or legacy 'name (type)' string."""
     if plugin.startswith("krkn/scenario_plugins/"):
@@ -92,10 +124,95 @@ def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
     desc = gap.bug.description.lower() if gap.bug.description else ""
     text = f"{summary} {desc}"
 
+    if "kubevirt" in text or "virt-launcher" in text or "vm migration" in text:
+        return (
+            "Disrupt a KubeVirt virtual machine and verify recovery",
+            _plugin_path("kubevirt_vm_outage"),
+            "Use `scenarios/kubevirt/kubevirt-vm-outage.yaml` with `vm_name` or `label_selector` "
+            "in the target namespace.",
+        )
+    if "managedcluster" in text or "klusterlet" in text or "multicluster" in text:
+        return (
+            "Disrupt a ManagedCluster or klusterlet and verify OCM detection/recovery",
+            _plugin_path("managed_cluster"),
+            "Use `managedcluster_stop_start_scenario` with `managedcluster_name` or `label_selector`.",
+        )
+    if "zone outage" in text or "availability zone" in text:
+        return (
+            "Simulate an availability zone outage via network ACL changes",
+            _plugin_path("zone_outage"),
+            "Configure `zone_outage` with `cloud_type`, `duration`, and `subnet_id`.",
+        )
+    if "cluster shut down" in text or "cluster shutdown" in text:
+        return (
+            "Shut down all cluster nodes for a duration and verify recovery on restart",
+            _plugin_path("shut_down"),
+            "Use `cluster_shut_down_scenario` with `shut_down_duration` and `cloud_type`.",
+        )
+    if "clock skew" in text or "time skew" in text or "ntp drift" in text:
+        return (
+            "Inject clock skew on pods or nodes to test time-sensitive component behavior",
+            _plugin_path("time_actions"),
+            "Use `time_scenarios` with `action: skew_time` or `skew_date` and `label_selector`.",
+        )
+    if "storage throttle" in text or "iops limit" in text or "disk throttle" in text:
+        return (
+            "Throttle storage I/O on a PVC mount to simulate degraded disk performance",
+            _plugin_path("storage_throttle"),
+            "Use `storage_throttle_scenario` with `pvc_name`, `throttle_type`, and `duration`.",
+        )
+    if "disk full" in text or "out of space" in text or "pvc full" in text:
+        return (
+            "Fill a PVC to capacity to test out-of-disk handling",
+            _plugin_path("pvc"),
+            "Use `pvc_scenario` with `pvc_name`, `namespace`, and `fill_percentage`.",
+        )
+    if "syn flood" in text or "syn-flood" in text or "hping" in text:
+        return (
+            "Launch a SYN flood against a target service",
+            _plugin_path("syn_flood"),
+            "Configure `target-service`, `target-port`, and `duration`.",
+        )
+    if "service hijack" in text or "service hijacking" in text:
+        return (
+            "Hijack a Kubernetes service to return error responses to callers",
+            _plugin_path("service_hijacking"),
+            "Set `service_name`, `service_namespace`, and a `plan` with HTTP status steps.",
+        )
+    if "service disruption" in text:
+        return (
+            "Disrupt services in a namespace to test application resilience",
+            _plugin_path("service_disruption"),
+            "Use `scenarios` with `namespace` regex, `runs`, and `wait_time`.",
+        )
+    if "application outage" in text or "route inaccessible" in text:
+        return (
+            "Block ingress/egress traffic to application routes",
+            _plugin_path("application_outage"),
+            "Use `application_outage` with `namespace`, `pod_selector`, and `block`.",
+        )
+    if "http load" in text or "load test" in text or "request rate" in text:
+        return (
+            "Generate HTTP load against target endpoints to test saturation behavior",
+            _plugin_path("http_load"),
+            "Use `- http_load_scenario:` with `targets.endpoints`, `rate`, and `duration`.",
+        )
+    if "container kill" in text or "kill container" in text:
+        return (
+            "Kill or disrupt a specific container within a pod",
+            _plugin_path("container"),
+            "Use `scenarios` with `namespace`, `label_selector`, `container_name`, and `action: 1`.",
+        )
+    if "pod network" in text or "network filter" in text or "interface down" in text:
+        return (
+            "Apply pod- or node-level network filters (latency, loss, bandwidth)",
+            _plugin_path("network_chaos_ng"),
+            "Use `- id: pod_network_chaos` with `label_selector`, `latency`, and `loss`.",
+        )
     if "node delete" in text or "node replace" in text:
         return (
             "Delete a control-plane node object via Kubernetes API, wait for Machine API to recreate it with the same name",
-            "node_actions (node_scenarios)",
+            _plugin_path("node_actions"),
             "Use `node_stop_start_scenario` or `node_terminate_scenario` with `label_selector: node-role.kubernetes.io/master`. "
             "Note: current node_actions plugin terminates cloud instances — deleting the Node API object may require a new scenario "
             "or use of `cluster_shut_down_scenarios` combined with manual `oc delete node`.",
@@ -103,7 +220,7 @@ def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
     if "throttl" in text or "api server load" in text or "resource pressure" in text:
         return (
             "Create resource pressure on API server nodes using CPU/memory hog pods, then verify component health reporting",
-            "hogs (hog_scenarios)",
+            _plugin_path("hogs"),
             "Deploy CPU/memory hog pods on master nodes using `label_selector: node-role.kubernetes.io/master`. "
             "Set `memory` or `cpu` targets high enough to cause API server throttling. "
             "Combine with a health assertion step that checks the target component's operator status.",
@@ -111,27 +228,27 @@ def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
     if "upgrade" in text or "rollback" in text:
         return (
             "Inject failures during an OCP upgrade to test upgrade resilience",
-            "pod_disruption (pod_disruption_scenarios)",
+            _plugin_path("pod_disruption"),
             "Run pod kill scenarios targeting the component's pods during an active upgrade. "
             "Combine with the upgrade Prow workflow (`openshift-qe-upgrade` chain).",
         )
     if "network" in text or "partition" in text or "latency" in text:
         return (
             "Inject network latency or partition between component pods",
-            "network_chaos (network_chaos_scenarios)",
+            _plugin_path("network_chaos"),
             "Use `tc netem` based network shaping or iptables-based partition. "
             "Target the component's namespace and pods.",
         )
     if "quorum" in text or "leader" in text or "etcd" in text:
         return (
             "Disrupt etcd members to test quorum loss and recovery",
-            "pod_disruption (pod_disruption_scenarios)",
+            _plugin_path("pod_disruption"),
             "Kill etcd pods in `openshift-etcd` namespace. Verify cluster recovers quorum "
             "and the etcd operator reports correct status within expected time.",
         )
     return (
         "Inject component-specific failure and verify recovery",
-        "pod_disruption (pod_disruption_scenarios)",
+        _plugin_path("pod_disruption"),
         "Target the component's pods in its namespace using label selectors.",
     )
 
