@@ -11,7 +11,7 @@ from src.agents.registry import discover_agents
 from src.apis.jira_client import JiraClient
 from src.apis.sippy_client import SippyClient
 from src.apis.github_client import GitHubClient
-from src.filter.chaos_filter import filter_bug, filter_bugs
+from src.filter.chaos_filter import filter_bug, filter_bugs, filter_domain_bugs
 from src.filter.llm_filter import get_token_usage, reset_token_usage
 from src.filter.llm_tools import filter_bug_llm, map_match_llm, analyze_gap_llm
 from src.status import status, status_done
@@ -52,6 +52,7 @@ class BaseDomainAgent(ABC):
         release: str,
         neo4j_store: Neo4jStore,
         use_llm: bool = False,
+        domain_filter_only: bool = False,
         max_bugs: int = 2000,
         days: int = 14,
     ):
@@ -64,6 +65,7 @@ class BaseDomainAgent(ABC):
         self.release = release
         self.neo4j = neo4j_store
         self.use_llm = use_llm
+        self.domain_filter_only = domain_filter_only
         self.max_bugs = max_bugs
         self.days = days
         self.components = get_components_for_agent(agent_name)
@@ -210,6 +212,9 @@ class BaseDomainAgent(ABC):
     def _filter(
         self, bugs: list[Bug], metrics: RunMetrics,
     ) -> tuple[list[FilterResult], list[FilterResult]]:
+        if self.domain_filter_only:
+            logger.info("Using domain-only filter (ocp-virt keywords, no chaos gate)")
+            return filter_domain_bugs(bugs, agent_name=self.agent_name)
         if self.use_llm:
             logger.info("Using tiered filter: keyword → cache → LLM")
             return self._tiered_filter(bugs, metrics)

@@ -27,13 +27,17 @@ If the user query is NOT empty, run in **Targeted Query** mode:
 - "what etcd bugs and coverage do we have" → Search JIRA for etcd component bugs + search ChromaDB for etcd scenarios + report gaps
 - "does krkn cover OVN pod failures" → Search scenarios for OVN, read the YAML files, report what's covered vs missing
 - "analyze OCPBUGS-12345" → Pull that specific bug, run FILTER/MAP/ANALYZE on just that bug
+- "virtualization domain filter only 100 bugs" → `--agent virtualization --domain-filter-only --max-bugs 100 --days 365`
+- "test virt ocp-virt keywords without chaos filter" → `ocp_virt_filter_eval --domain-only` or `--domain-filter-only`
 - "what gaps exist for networking" → Query Neo4j for networking gap counts + search ChromaDB for networking scenarios
 - "show me all hog scenarios" → Search ChromaDB/krkn docs for hog scenario plugins and list them
 - "what components have the most open gaps" → Query Neo4j gap counts
 
 ## Interactive Setup (Full Scan only)
 
-Before running the pipeline, ask the user these questions using AskUserQuestion. Ask all 4 in a single AskUserQuestion call:
+Before running the pipeline, ask the user these questions using AskUserQuestion.
+
+**Batch 1 — ask Questions 1–4 in a single AskUserQuestion call:**
 
 **Question 1 — OCP Version:**
 - Question: "Which OpenShift version(s) to scan?"
@@ -45,9 +49,9 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
 **Question 2 — Agent Scope:**
-- First, discover available agents dynamically:
+- First, discover available agents dynamically (use the repo root where this command is running):
 ```bash
-cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
 from src.agents.registry import discover_agents
 for name, cfg in sorted(discover_agents().items()):
     print(f'{name}: {cfg.description}')
@@ -61,10 +65,11 @@ for name, cfg in sorted(discover_agents().items()):
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
 - Options:
-  - "14 days (Recommended)" — Last 2 weeks of bugs
+  - "365 days (Recommended for virt)" — Full year (needed for virtualization agent sample size)
+  - "14 days" — Last 2 weeks of bugs
   - "7 days" — Last week only (quick scan)
-  - "30 days" — Full month (more thorough)
-  - "60 days" — Deep scan (catches older unfixed bugs)
+  - "30 days" — Full month
+  - "60 days" — Deep scan
 
 **Question 4 — Scan Settings:**
 - Question: "What kind of scan?"
@@ -78,35 +83,89 @@ Map selections to CLI flags (use the days value from Question 3):
 - "Quick scan" → `--max-bugs 50 --use-llm`
 - "Keyword only" → `--max-bugs 2000` (no --use-llm)
 
+**Batch 2 — Filter stages (only when virtualization is the sole selected agent):**
+
+If the user selected **only** `virtualization` (not "All agents", not multiple agents), ask a **second** AskUserQuestion with multiSelect:
+
+**Question 5 — Filter stages:**
+- Question: "Which filter stages should run? (virtualization agent)"
+- multiSelect: true
+- allow_multiple: true
+- Options:
+  - "OpenShift Virtualization (Recommended)" — Domain filter: `ocp-virt.yaml` keywords + virt skip list. Answers: *Is this an OCP Virt bug?*
+  - "Krkn Chaos (Recommended)" — Chaos filter: common chaos keywords + krkn injection matching. Answers: *Is this chaos-testable?*
+- Default if user picks nothing: treat as both checked.
+
+Map checkbox combinations to CLI flags:
+
+| OpenShift Virtualization | Krkn Chaos | CLI flags | What runs |
+|--------------------------|------------|-----------|-----------|
+| ✓ | ✓ | *(none)* | Full keyword filter (`filter_bug`) — domain + chaos gates |
+| ✓ | | `--domain-filter-only` | Domain filter only (`filter_domain_bug`) — tune ocp-virt keywords |
+| | ✓ | *(none)* | Standard chaos keyword filter (same as both for `--agent virtualization`) |
+| | | — | Invalid — re-ask; at least one stage required |
+
+**Important constraints:**
+- `--domain-filter-only` requires `--agent virtualization` alone (no `--use-llm`).
+- If user selected "All agents" or multiple agents including virtualization, **skip Question 5** and use the default full chaos filter for every agent.
+- For non-virtualization agents, only the Krkn Chaos filter applies (Question 5 is not shown).
+
+**Virt filter eval (no Neo4j, filter tuning only):**
+
+When the user selects **OpenShift Virtualization only** (no Krkn Chaos), prefer the eval script instead of the full pipeline if Neo4j is unavailable:
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -m src.evals.ocp_virt_filter_eval \
+  --release <VERSION> --max-bugs <MAX> --days <DAYS> --domain-only
+```
+
+When both stages are checked but user wants keyword-only validation (no MAP/ANALYZE/Neo4j), use the eval script without `--domain-only`:
+
+```bash
+PYTHONPATH=. python3 -m src.evals.ocp_virt_filter_eval \
+  --release <VERSION> --max-bugs <MAX> --days <DAYS>
+```
+
 ## Running the Pipeline
 
 After getting answers, run the pipeline using `main.py`:
 
 ```bash
-cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 src/main.py \
+REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+cd "$REPO" && PYTHONPATH=. python3 src/main.py \
   --release <VERSION_OR_COMMA_LIST> \
-  --agent <AGENT_OR_COMMA_LIST_OR_all> \
-  --use-llm \
+  --agent <AGENT_OR_COMMA_LIST_OR_omit_for_all> \
   --max-bugs <MAX_BUGS> \
   --days <DAYS> \
-  --parallel
+  [--use-llm] \
+  [--domain-filter-only] \
+  [--parallel]
 ```
 
-Note: Always include `--parallel` when running multiple agents (it's the default behavior for multi-agent runs). Only omit it for single-agent runs.
+**Filter stage flags (virtualization agent only):**
+- Both "OpenShift Virtualization" and "Krkn Chaos" checked → omit `--domain-filter-only`
+- Only "OpenShift Virtualization" checked → add `--domain-filter-only` (do **not** add `--use-llm`)
+- Only "Krkn Chaos" checked → omit `--domain-filter-only`
+
+Note: Always include `--parallel` when running multiple agents. Omit for single-agent runs.
 
 **Examples:**
+- Virt domain filter only: `--release 4.21 --agent virtualization --max-bugs 100 --days 365 --domain-filter-only`
+- Virt full keyword filter: `--release 4.21 --agent virtualization --max-bugs 100 --days 365`
+- Virt full LLM scan: `--release 4.21 --agent virtualization --max-bugs 100 --days 365 --use-llm`
 - Single version, single agent: `--release 4.21 --agent control_plane`
 - Multiple versions: `--release 4.20,4.21`
 - Multiple agents: `--agent control_plane,networking,storage`
-- All agents (omit --agent or pass "all"): `--release 4.21`
-- Everything: `--release 4.19,4.20,4.21 --agent all`
+- All agents (omit --agent): `--release 4.21`
 - Quick scan: `--max-bugs 50 --days 7`
-- Deep scan: `--max-bugs 2000 --days 60`
 
 Map the user's interactive selections:
-- "All bugs" → `--max-bugs 2000`
+- "All bugs" / full scan → `--max-bugs 2000`
+- "Quick scan" → `--max-bugs 50`
+- "365 days" → `--days 365`
 - "14 days" → `--days 14`
 - "All agents" → omit `--agent` flag
+- "virtualization" only + OCP Virt checkbox only → `--agent virtualization --domain-filter-only`
 
 ## After the Scan: Post Gaps to GitHub
 
@@ -156,11 +215,30 @@ Each agent runs the full pipeline for its component area.
 - Z-stream enrichment from OpenShift release controller (fix commits, images)
 - Neo4j dedup: already-analyzed bugs get status update only (zero LLM cost)
 
-### FILTER (3-tier: keyword → semantic cache → LLM)
+### FILTER (keyword → optional domain → semantic cache → LLM)
+
+**Virtualization agent — two-stage keyword filter:**
+
+1. **OpenShift Virtualization** (`--domain-filter-only` or `ocp_virt_filter_eval --domain-only`)
+   - Source: `config/filters/ocp-virt.yaml`
+   - Applies: virt domain keywords + virt skip keywords
+   - Skips: common chaos keywords, krkn injection matching
+   - Log prefix: `DOMAIN PASS` / `DOMAIN SKIP`
+
+2. **Krkn Chaos** (default `filter_bug` for `--agent virtualization`)
+   - Source: `common.yaml` + agent YAML + `ocp-virt.yaml` merged into chaos keywords
+   - Applies: skip keywords, chaos keywords, krkn injection-method matching
+   - Log prefix: `PASS` / `SKIP`
+
+When both stages are enabled (default), stage 2 runs as a single `filter_bug()` call — effectively domain keywords plus chaos gates together.
+
+**All agents — standard 3-tier filter when `--use-llm`:**
 - Layer 1: Keyword pre-filter (config/filters/common.yaml + agent overrides). Zero tokens.
 - Layer 2: Semantic cache in ChromaDB (cosine distance < 0.15). Zero tokens.
 - Layer 3: LLM classification via claude_code provider (--bare --system-prompt for minimal token usage ~2,700/call)
 - Confidence < 80 auto-escalates from Sonnet to Opus
+
+`--domain-filter-only` is incompatible with `--use-llm`.
 
 ### MAP (ChromaDB RAG + LLM reasoning)
 - Per-component ChromaDB search (scenarios + krkn docs + OCP docs)

@@ -15,7 +15,11 @@ from dotenv import load_dotenv
 
 from src.agents.registry import discover_agents
 from src.apis.jira_client import JiraClient, JiraConfig
-from src.filter.chaos_filter import filter_bug, get_filter_keywords
+from src.filter.chaos_filter import (
+    filter_bug,
+    filter_domain_bug,
+    get_filter_keywords,
+)
 from src.models import Bug
 
 logger = logging.getLogger(__name__)
@@ -32,6 +36,7 @@ def run_ocp_virt_filter_eval(
     release: str = "4.21",
     max_bugs: int = 100,
     days: int = 60,
+    domain_only: bool = False,
 ) -> dict:
     """Fetch virt component bugs from JIRA and run keyword filter."""
     agents = discover_agents()
@@ -66,7 +71,10 @@ def run_ocp_virt_filter_eval(
     for bug in bugs:
         if _matches_virt_keyword(bug, virt_keywords):
             keyword_hits += 1
-        result = filter_bug(bug, agent_name=VIRT_AGENT)
+        if domain_only:
+            result = filter_domain_bug(bug, agent_name=VIRT_AGENT)
+        else:
+            result = filter_bug(bug, agent_name=VIRT_AGENT)
         if result.chaos_relevant:
             relevant.append(result)
         else:
@@ -76,6 +84,7 @@ def run_ocp_virt_filter_eval(
         "release": release,
         "max_bugs": max_bugs,
         "days": days,
+        "domain_only": domain_only,
         "components": list(agent.components),
         "total_bugs": len(bugs),
         "keyword_hits": keyword_hits,
@@ -88,11 +97,13 @@ def run_ocp_virt_filter_eval(
 
 def _print_report(report: dict) -> None:
     total = report["total_bugs"]
-    print(f"\nOCP Virt filter eval — release {report['release']}")
+    mode = "domain-only" if report.get("domain_only") else "chaos filter"
+    print(f"\nOCP Virt filter eval ({mode}) — release {report['release']}")
     print(f"Components: {len(report['components'])}")
     print(f"Bugs fetched: {total}")
     print(f"Matched ocp-virt keyword in text: {report['keyword_hits']}")
-    print(f"Chaos-relevant (PASS): {report['chaos_relevant']}")
+    pass_label = "Domain-relevant (PASS)" if report.get("domain_only") else "Chaos-relevant (PASS)"
+    print(f"{pass_label}: {report['chaos_relevant']}")
     print(f"Skipped: {report['skipped']}")
     if total:
         print(f"Pass rate: {report['chaos_relevant'] / total:.1%}")
@@ -117,6 +128,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--release", default="4.21", help="OCP release (default: 4.21)")
     parser.add_argument("--max-bugs", type=int, default=100, help="Max bugs to fetch")
     parser.add_argument("--days", type=int, default=365, help="Lookback window in days")
+    parser.add_argument(
+        "--domain-only",
+        action="store_true",
+        help="Domain filter only (ocp-virt keywords, no chaos/injection gate)",
+    )
     args = parser.parse_args(argv)
 
     if not os.environ.get("JIRA_API_TOKEN"):
@@ -127,6 +143,7 @@ def main(argv: list[str] | None = None) -> int:
         release=args.release,
         max_bugs=args.max_bugs,
         days=args.days,
+        domain_only=args.domain_only,
     )
     _print_report(report)
     return 0

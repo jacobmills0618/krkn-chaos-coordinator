@@ -56,6 +56,13 @@ def main():
         help="Enable LLM-enhanced filter/map/analyze (uses tiered model routing)",
     )
     parser.add_argument(
+        "--domain-filter-only", action="store_true", default=False,
+        help=(
+            "Use ocp-virt domain keywords only (virtualization agent). "
+            "Skips common chaos keywords and krkn injection matching."
+        ),
+    )
+    parser.add_argument(
         "--krkn-repo",
         default=os.environ.get("KRKN_REPO_PATH", str(Path.home() / "krkn")),
         help="Path to local krkn repo (env: KRKN_REPO_PATH)",
@@ -69,6 +76,10 @@ def main():
         help="Run agents in parallel (faster, requires stable Neo4j connection)",
     )
     args = parser.parse_args()
+
+    if args.domain_filter_only and args.use_llm:
+        print("ERROR: --domain-filter-only cannot be combined with --use-llm")
+        return
 
     # Initialize API clients
     jira = JiraClient(
@@ -114,6 +125,15 @@ def main():
 
     logger.info("Agent(s): %s", ", ".join(agent_names))
 
+    if args.domain_filter_only:
+        non_virt = [a for a in agent_names if a != "virtualization"]
+        if non_virt:
+            print(
+                "ERROR: --domain-filter-only requires --agent virtualization only "
+                f"(incompatible: {', '.join(non_virt)})"
+            )
+            return
+
     # Connect Neo4j (required — no JSON fallback)
     from src.knowledge.neo4j_store import Neo4jStore
     neo4j_store = Neo4jStore(
@@ -140,6 +160,9 @@ def main():
             "release": release,
             "neo4j_store": neo4j_store,
             "use_llm": args.use_llm,
+            "domain_filter_only": args.domain_filter_only,
+            "max_bugs": args.max_bugs,
+            "days": args.days,
         }
         agent = BaseDomainAgent(agent_name=agent_name, **agent_kwargs)
         return agent.run()

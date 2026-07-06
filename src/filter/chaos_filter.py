@@ -121,6 +121,18 @@ def get_filter_keywords(agent_name: str | None = None) -> tuple[list[str], list[
     return skip, chaos
 
 
+def get_domain_filter_keywords(agent_name: str | None) -> tuple[list[str], list[str]] | None:
+    """Return (skip_keywords, domain_keywords) for domain-only filtering.
+
+    Currently supported for the virtualization agent (ocp-virt.yaml).
+    Returns None when the agent has no domain filter config.
+    """
+    if agent_name != "virtualization":
+        return None
+    virt = _load_ocp_virt_filters()
+    return virt["skip_keywords"], virt["ocp_virt_keywords"]
+
+
 # ---------------------------------------------------------------------------
 # krkn injection capabilities
 # ---------------------------------------------------------------------------
@@ -213,6 +225,80 @@ def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
         injection_method=injection_method,
         confidence=0.5,
     )
+
+
+def filter_domain_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
+    """Domain-only filter — ocp-virt keywords without chaos/injection gates.
+
+    Use to validate domain keyword coverage before applying the full chaos filter.
+    Only applies skip keywords and domain keywords from ocp-virt.yaml (not
+    common.yaml chaos keywords or krkn injection matching).
+    """
+    domain = get_domain_filter_keywords(agent_name)
+    if domain is None:
+        raise ValueError(
+            f"Agent '{agent_name}' has no domain filter config "
+            "(currently only 'virtualization' supports --domain-filter-only)"
+        )
+
+    skip_keywords, domain_keywords = domain
+    text = f"{bug.summary} {bug.description}".lower()
+
+    if "clone of issue" in text[:200] or "[stub]" in bug.summary.lower():
+        return FilterResult(
+            bug=bug,
+            chaos_relevant=False,
+            skip_reason="Stub/clone ticket — not an original bug report",
+            confidence=0.95,
+        )
+
+    for keyword in skip_keywords:
+        if keyword.lower() in text:
+            return FilterResult(
+                bug=bug,
+                chaos_relevant=False,
+                skip_reason=f"Not domain-relevant: matches skip keyword '{keyword}'",
+                confidence=0.95,
+            )
+
+    matched = [kw for kw in domain_keywords if kw.lower() in text]
+    if not matched:
+        return FilterResult(
+            bug=bug,
+            chaos_relevant=False,
+            skip_reason="No ocp-virt domain keywords found in bug description",
+            confidence=0.7,
+        )
+
+    return FilterResult(
+        bug=bug,
+        chaos_relevant=True,
+        failure_mode=f"Domain indicators: {', '.join(matched[:5])}",
+        confidence=0.85,
+    )
+
+
+def filter_domain_bugs(
+    bugs: list[Bug], agent_name: str | None = None,
+) -> tuple[list[FilterResult], list[FilterResult]]:
+    """Filter bugs using domain keywords only (no chaos/injection gate)."""
+    relevant = []
+    skipped = []
+
+    for bug in bugs:
+        result = filter_domain_bug(bug, agent_name)
+        if result.chaos_relevant:
+            relevant.append(result)
+            logger.info("DOMAIN PASS %s: %s", bug.key, result.failure_mode)
+        else:
+            skipped.append(result)
+            logger.info("DOMAIN SKIP %s: %s", bug.key, result.skip_reason)
+
+    logger.info(
+        "Domain filter result: %d relevant, %d skipped out of %d total",
+        len(relevant), len(skipped), len(bugs),
+    )
+    return relevant, skipped
 
 
 def filter_bugs(bugs: list[Bug], agent_name: str | None = None) -> tuple[list[FilterResult], list[FilterResult]]:
