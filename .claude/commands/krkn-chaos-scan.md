@@ -49,9 +49,9 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
 **Question 2 — Agent Scope:**
-- First, discover available agents dynamically (use the repo root where this command is running):
+- First, discover available agents dynamically:
 ```bash
-cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
+cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.agents.registry import discover_agents
 for name, cfg in sorted(discover_agents().items()):
     print(f'{name}: {cfg.description}')
@@ -65,11 +65,11 @@ for name, cfg in sorted(discover_agents().items()):
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
 - Options:
-  - "365 days (Recommended for virt)" — Full year (needed for virtualization agent sample size)
-  - "14 days" — Last 2 weeks of bugs
+  - "14 days (Recommended)" — Last 2 weeks of bugs
   - "7 days" — Last week only (quick scan)
-  - "30 days" — Full month
-  - "60 days" — Deep scan
+  - "30 days" — Full month (more thorough)
+  - "60 days" — Deep scan (catches older unfixed bugs)
+  - "365 days (Apply for ocp-virt filtering) - Full year (needed for virtualization agent sample size)
 
 **Question 4 — Scan Settings:**
 - Question: "What kind of scan?"
@@ -88,12 +88,12 @@ Map selections to CLI flags (use the days value from Question 3):
 If the user selected **only** `virtualization` (not "All agents", not multiple agents), ask a **second** AskUserQuestion with multiSelect:
 
 **Question 5 — Filter stages:**
-- Question: "Which filter stages should run? (virtualization agent)"
+- Question: "Select which filter layers should be applied? (virtualization agent)"
 - multiSelect: true
 - allow_multiple: true
 - Options:
-  - "OpenShift Virtualization (Recommended)" — Domain filter: `ocp-virt.yaml` keywords + virt skip list. Answers: *Is this an OCP Virt bug?*
-  - "Krkn Chaos (Recommended)" — Chaos filter: common chaos keywords + krkn injection matching. Answers: *Is this chaos-testable?*
+  - "OpenShift Virtualization (Broad Primary Filtering)" — Domain filter: common ocp-virt keywords + virt skip list. Answers: *Is this an OCP Virt bug?*
+  - "Krkn Chaos (Specific Secondary Filtering)" — Chaos filter: common chaos keywords + krkn injection matching. Answers: *Is this chaos-testable?*
 - Default if user picks nothing: treat as both checked.
 
 Map checkbox combinations to CLI flags:
@@ -131,10 +131,10 @@ PYTHONPATH=. python3 -m src.evals.ocp_virt_filter_eval \
 After getting answers, run the pipeline using `main.py`:
 
 ```bash
-REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-cd "$REPO" && PYTHONPATH=. python3 src/main.py \
+cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 src/main.py \
   --release <VERSION_OR_COMMA_LIST> \
-  --agent <AGENT_OR_COMMA_LIST_OR_omit_for_all> \
+  --agent <AGENT_OR_COMMA_LIST_OR_all> \
+  --use-llm \
   --max-bugs <MAX_BUGS> \
   --days <DAYS> \
   [--use-llm] \
@@ -156,8 +156,10 @@ Note: Always include `--parallel` when running multiple agents. Omit for single-
 - Single version, single agent: `--release 4.21 --agent control_plane`
 - Multiple versions: `--release 4.20,4.21`
 - Multiple agents: `--agent control_plane,networking,storage`
-- All agents (omit --agent): `--release 4.21`
+- All agents (omit --agent or pass "all"): `--release 4.21`
+- Everything: `--release 4.19,4.20,4.21 --agent all`
 - Quick scan: `--max-bugs 50 --days 7`
+- Deep scan: `--max-bugs 2000 --days 60`
 
 Map the user's interactive selections:
 - "All bugs" / full scan → `--max-bugs 2000`
