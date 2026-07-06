@@ -28,3 +28,12 @@ filter:
 ```
 
 Agent keywords are **merged** with common keywords (not replacing them).
+
+## OpenShift Virtualization (`ocp-virt.yaml`)
+
+Used automatically when running `--agent virtualization`. Loads:
+
+- `skip_keywords` — virt-specific skips (merged with common + agent YAML)
+- `ocp-virt_keywords` — domain keywords merged into `chaos_keywords`
+
+Requires `config/agents/virtualization.yaml` for JIRA component discovery.

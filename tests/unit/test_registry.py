@@ -63,6 +63,15 @@ class TestLoadAgentConfig:
         config = _load_agent_config(path)
         assert config.description == ""
 
+    def test_loads_discovery_jql(self, tmp_path: Path) -> None:
+        path = _write_yaml(tmp_path, "virt", {
+            "name": "virt",
+            "components": ["Virtualization"],
+            "discovery_jql": 'project = OCPBUGS AND text ~ "kubevirt"',
+        })
+        config = _load_agent_config(path)
+        assert config.discovery_jql == 'project = OCPBUGS AND text ~ "kubevirt"'
+
 
 class TestDiscoverAgents:
 
@@ -113,6 +122,7 @@ class TestDiscoverAgents:
         assert len(agents) >= 6
         assert "control_plane" in agents
         assert "networking" in agents
+        assert "virtualization" in agents
         assert len(agents["control_plane"].components) > 0
 
     def test_new_yaml_file_auto_discovered(self, tmp_path: Path) -> None:

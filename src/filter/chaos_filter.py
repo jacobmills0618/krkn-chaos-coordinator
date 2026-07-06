@@ -30,7 +30,31 @@ _AGENTS_DIR = Path(__file__).parent.parent.parent / "config" / "agents"
 # ---------------------------------------------------------------------------
 
 _common_cache: dict | None = None
+_ocp_virt_cache: dict | None = None
 _cache_lock = threading.Lock()
+
+
+def _load_ocp_virt_filters() -> dict:
+    """Load OpenShift Virtualization keywords from config/filters/ocp-virt.yaml."""
+    global _ocp_virt_cache
+    with _cache_lock:
+        if _ocp_virt_cache is not None:
+            return _ocp_virt_cache
+
+        path = _FILTERS_DIR / "ocp-virt.yaml"
+        if not path.exists():
+            logger.warning("OCP Virt filter config not found at %s", path)
+            _ocp_virt_cache = {"skip_keywords": [], "ocp_virt_keywords": []}
+            return _ocp_virt_cache
+
+        with open(path) as f:
+            data = yaml.safe_load(f) or {}
+
+        _ocp_virt_cache = {
+            "skip_keywords": [str(k) for k in data.get("skip_keywords", [])],
+            "ocp_virt_keywords": [str(k) for k in data.get("ocp-virt_keywords", [])],
+        }
+        return _ocp_virt_cache
 
 
 def _load_common_filters() -> dict:
@@ -89,6 +113,10 @@ def get_filter_keywords(agent_name: str | None = None) -> tuple[list[str], list[
         agent = _load_agent_filter(agent_name)
         skip.extend(agent["skip_keywords"])
         chaos.extend(agent["chaos_keywords"])
+        if agent_name == "virtualization":
+            virt = _load_ocp_virt_filters()
+            skip.extend(virt["skip_keywords"])
+            chaos.extend(virt["ocp_virt_keywords"])
 
     return skip, chaos
 

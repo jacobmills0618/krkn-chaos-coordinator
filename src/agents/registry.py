@@ -24,6 +24,7 @@ class AgentConfig:
     description: str
     components: tuple[str, ...]
     docs: tuple[dict, ...] = ()
+    discovery_jql: str | None = None
 
 
 def _load_agent_config(path: Path) -> AgentConfig:
@@ -55,11 +56,16 @@ def _load_agent_config(path: Path) -> AgentConfig:
             docs.append({"type": "github", "owner": d["owner"], "repo": d["repo"], "path": d.get("path", "")})
     docs = tuple(docs)
 
+    discovery_jql = data.get("discovery_jql")
+    if discovery_jql is not None:
+        discovery_jql = str(discovery_jql).strip() or None
+
     return AgentConfig(
         name=name,
         description=data.get("description", ""),
         components=tuple(components),
         docs=docs,
+        discovery_jql=discovery_jql,
     )
 
 

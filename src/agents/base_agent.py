@@ -7,6 +7,7 @@ import time
 from abc import ABC
 from dataclasses import asdict
 
+from src.agents.registry import discover_agents
 from src.apis.jira_client import JiraClient
 from src.apis.sippy_client import SippyClient
 from src.apis.github_client import GitHubClient
@@ -66,6 +67,8 @@ class BaseDomainAgent(ABC):
         self.max_bugs = max_bugs
         self.days = days
         self.components = get_components_for_agent(agent_name)
+        agent_config = discover_agents().get(agent_name)
+        self._discovery_jql = agent_config.discovery_jql if agent_config else None
         self._slog = StructuredLogger(f"coordinator.{agent_name}")
 
         try:
@@ -158,9 +161,12 @@ class BaseDomainAgent(ABC):
     # ── DISCOVER ──────────────────────────────────────────────────
 
     def _discover(self) -> list[Bug]:
-        return self.jira.get_bugs_by_components(
-            self.components, days=self.days, max_results=self.max_bugs,
+        return self.jira.discover_bugs(
+            self.components,
+            days=self.days,
+            max_results=self.max_bugs,
             release=self.release,
+            discovery_jql=self._discovery_jql,
         )
 
     def _enrich_with_changelog(self, bugs: list[Bug]) -> list[Bug]:
