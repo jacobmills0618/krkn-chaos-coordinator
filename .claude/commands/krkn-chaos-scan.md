@@ -69,7 +69,7 @@ for name, cfg in sorted(discover_agents().items()):
   - "7 days" — Last week only (quick scan)
   - "30 days" — Full month (more thorough)
   - "60 days" — Deep scan (catches older unfixed bugs)
-  - "365 days (Apply for ocp-virt filtering) - Full year (needed for virtualization agent sample size)
+  - "365 days" - Full year (needed for virtualization agent sample size)
 
 **Question 4 — Scan Settings:**
 - Question: "What kind of scan?"
