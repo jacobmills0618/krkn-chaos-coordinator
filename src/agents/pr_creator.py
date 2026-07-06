@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
+from src.agents.act import _infer_injection_method, _scenario_type_from_plugin
 from src.apis.github_client import GitHubClient
 from src.models import GapAnalysis
 
@@ -191,20 +192,8 @@ def generate_scenario_yaml(gap: GapAnalysis) -> tuple[str, str]:
     bug_id = bug.key.lower().replace("-", "_")
     filename = f"{component}_{bug_id}.yaml"
 
-    # Determine scenario type based on injection method
-    from src.agents.act import _infer_injection_method
     _, plugin, _ = _infer_injection_method(gap)
-
-    # Map plugin to scenario type
-    plugin_to_type = {
-        "hogs (hog_scenarios)": "hog_scenarios",
-        "node_actions (node_scenarios)": "node_scenarios",
-        "pod_disruption (pod_disruption_scenarios)": "pod_disruption_scenarios",
-        "network_chaos (network_chaos_scenarios)": "network_chaos_scenarios",
-        "network_chaos (network_chaos_ng_scenarios)": "network_chaos_ng_scenarios",
-        "time_actions (time_scenarios)": "time_scenarios",
-    }
-    scenario_type = plugin_to_type.get(plugin, "pod_disruption_scenarios")
+    scenario_type = _scenario_type_from_plugin(plugin)
 
     # Generate YAML based on scenario type
     if scenario_type == "hog_scenarios":
