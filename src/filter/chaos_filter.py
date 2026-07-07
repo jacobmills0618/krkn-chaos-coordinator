@@ -201,10 +201,7 @@ def _partition_bugs(
 
 
 def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
-    """Determine if a bug is chaos-relevant using keyword heuristics.
-
-    Applies skip keywords, chaos keywords, and krkn injection-method matching.
-    """
+    """Determine if a bug is chaos-relevant using keyword heuristics."""
     skip_keywords, chaos_keywords = get_filter_keywords(agent_name)
     text = f"{bug.summary} {bug.description}".lower()
 
@@ -259,10 +256,7 @@ def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
 
 
 def filter_domain_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
-    """Domain-only filter — ocp-virt keywords without chaos/injection gates.
-
-    Use with ``--domain-filter-only`` to tune virt keyword coverage.
-    """
+    """Domain-only filter — ocp-virt keywords without chaos/injection gates."""
     domain = get_domain_filter_keywords(agent_name)
     if domain is None:
         raise ValueError(
