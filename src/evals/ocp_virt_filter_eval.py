@@ -20,7 +20,12 @@ from src.filter.chaos_filter import (
     filter_domain_bug,
     get_filter_keywords,
 )
-from src.models import Bug
+from src.coordinator.filter_review import (
+    format_filter_pass_list,
+    format_filter_skip_list,
+    write_filter_review_json,
+)
+from src.coordinator.filter_review_prompt import prompt_filter_review_from_results
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +138,17 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Domain filter only (ocp-virt keywords, no chaos/injection gate)",
     )
+    parser.add_argument(
+        "--filter-review-json",
+        default=None,
+        metavar="PATH",
+        help="Write full PASS/SKIP lists to JSON",
+    )
+    parser.add_argument(
+        "--no-filter-review",
+        action="store_true",
+        help="Skip interactive filter review prompt after eval",
+    )
     args = parser.parse_args(argv)
 
     if not os.environ.get("JIRA_API_TOKEN"):
@@ -146,6 +162,29 @@ def main(argv: list[str] | None = None) -> int:
         domain_only=args.domain_only,
     )
     _print_report(report)
+
+    mode = "domain-only" if report.get("domain_only") else "chaos filter"
+    if not args.no_filter_review:
+        prompt_filter_review_from_results(
+            report["relevant"],
+            report["skipped_results"],
+            export_path=args.filter_review_json,
+            title_pass=f"OCP Virt — Filter PASS ({mode})",
+            title_skip=f"OCP Virt — Filter SKIP ({mode})",
+        )
+    elif args.filter_review_json:
+        write_filter_review_json(
+            args.filter_review_json,
+            report["relevant"],
+            report["skipped_results"],
+            metadata={
+                "release": report["release"],
+                "domain_only": report.get("domain_only"),
+                "total_bugs": report["total_bugs"],
+            },
+        )
+        print(f"\nFilter review saved to {args.filter_review_json}")
+
     return 0
 
 

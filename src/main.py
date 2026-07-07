@@ -75,6 +75,18 @@ def main():
         "--parallel", action="store_true", default=False,
         help="Run agents in parallel (faster, requires stable Neo4j connection)",
     )
+    parser.add_argument(
+        "--filter-review-json",
+        default=None,
+        metavar="PATH",
+        help="Write full PASS/SKIP filter lists to JSON (virtualization agent)",
+    )
+    parser.add_argument(
+        "--no-filter-review",
+        action="store_true",
+        default=False,
+        help="Skip interactive filter review prompt after virtualization scans",
+    )
     args = parser.parse_args()
 
     if args.domain_filter_only and args.use_llm:
@@ -195,6 +207,16 @@ def main():
 
     print(format_summary(all_results))
     print()
+
+    ran_virt = "virtualization" in agent_names
+    if ran_virt and not args.no_filter_review:
+        from src.coordinator.filter_review_prompt import prompt_filter_review
+        prompt_filter_review(
+            all_results,
+            agent_name="virtualization",
+            export_path=args.filter_review_json,
+        )
+
     if gaps:
         print(format_approval_queue(gaps))
         _prompt_github_issues(gaps, github)

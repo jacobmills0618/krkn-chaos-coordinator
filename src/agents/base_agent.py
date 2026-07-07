@@ -135,6 +135,7 @@ class BaseDomainAgent(ABC):
         result = AgentResult(
             agent_name=self.agent_name,
             bugs_discovered=bugs,
+            bugs_passed_filter=relevant,
             bugs_filtered_out=skipped,
             bugs_matched=matched,
             gaps=gaps,

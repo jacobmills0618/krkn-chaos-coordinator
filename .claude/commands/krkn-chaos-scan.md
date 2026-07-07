@@ -169,6 +169,69 @@ Map the user's interactive selections:
 - "All agents" → omit `--agent` flag
 - "virtualization" only + OCP Virt checkbox only → `--agent virtualization --domain-filter-only`
 
+## After Filter: Review virt PASS / SKIP (virtualization scans)
+
+After a **virtualization** scan or `ocp_virt_filter_eval` completes, **always** offer filter review using AskUserQuestion before gap/issue steps:
+
+**Batch 3 — Filter review (virtualization agent only):**
+
+- Question: "Review filter results?"
+- Options:
+  - "Show all PASS bugs (Recommended)" — full list with filter confidence, failure mode, injection method, JIRA URL
+  - "Show all SKIP bugs" — full list with skip reason and confidence
+  - "Show both PASS and SKIP"
+  - "Skip review"
+
+**How to get the data:**
+
+1. **Preferred — eval script** (no Neo4j, keyword filter only):
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -m src.evals.ocp_virt_filter_eval \
+  --release <VERSION> --max-bugs <MAX> --days <DAYS> \
+  [--domain-only] \
+  --filter-review-json filter_review.json
+```
+The script prints a summary, saves JSON, and prompts `1/2/3/4` in the terminal.
+
+2. **Full pipeline** (after FILTER phase):
+```bash
+PYTHONPATH=. python3 src/main.py --release <VERSION> --agent virtualization \
+  --max-bugs <MAX> --days <DAYS> \
+  [--domain-filter-only] \
+  --filter-review-json filter_review.json
+```
+
+3. **Read saved JSON** if the user chose review in Claude but the terminal already ran:
+```bash
+PYTHONPATH=. python3 -c "
+import json
+from pathlib import Path
+from src.coordinator.filter_review import format_filter_pass_list, format_filter_skip_list
+from src.models import Bug, FilterResult
+
+data = json.loads(Path('filter_review.json').read_text())
+def row_to_fr(r):
+    return FilterResult(
+        bug=Bug(key=r['key'], summary=r['summary'], description='', component=r['component'],
+                priority='', status='', created='', url=r['url']),
+        chaos_relevant=r['outcome']=='pass',
+        failure_mode=r.get('failure_mode'),
+        injection_method=r.get('injection_method'),
+        skip_reason=r.get('skip_reason'),
+        confidence=r['confidence'],
+    )
+passed = [row_to_fr(r) for r in data['passed']]
+skipped = [row_to_fr(r) for r in data['skipped']]
+print(format_filter_pass_list(passed))
+print(format_filter_skip_list(skipped))
+"
+```
+
+**When presenting lists to the user in Claude**, format each bug as:
+`[CONFIDENCE%] OCPBUGS-XXXXX: summary (skip reason or injection method)`
+
+Use this review to tune `config/filters/ocp-virt.yaml` — false PASS → add skip keywords; false SKIP → add domain/chaos keywords.
+
 ## After the Scan: Post Gaps to GitHub
 
 If the pipeline found gaps, present each one to the user and ask which to post as GitHub issues using AskUserQuestion:
