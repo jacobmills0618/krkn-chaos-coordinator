@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 import yaml
 
-from src.agents.registry import AgentConfig, discover_agents, _load_agent_config
+from src.agents.registry import (
+    AgentConfig,
+    _load_agent_config,
+    discover_agents,
+    format_agent_prompt_option,
+)
 
 
 def _write_yaml(directory: Path, name: str, data: dict) -> Path:
@@ -71,6 +76,46 @@ class TestLoadAgentConfig:
         })
         config = _load_agent_config(path)
         assert config.discovery_jql == 'project = OCPBUGS AND text ~ "kubevirt"'
+
+    def test_loads_prompt_label(self, tmp_path: Path) -> None:
+        path = _write_yaml(tmp_path, "virt", {
+            "name": "virt",
+            "components": ["Virtualization"],
+            "prompt_label": "OpenShift Virtualization — VM, migration, KubeVirt (virt)",
+        })
+        config = _load_agent_config(path)
+        assert config.prompt_label == "OpenShift Virtualization — VM, migration, KubeVirt (virt)"
+
+
+class TestFormatAgentPromptOption:
+
+    def test_uses_prompt_label_when_set(self, tmp_path: Path) -> None:
+        path = _write_yaml(tmp_path, "virt", {
+            "name": "virt",
+            "components": ["Virtualization"],
+            "prompt_label": "Custom label (virt)",
+        })
+        config = _load_agent_config(path)
+        assert format_agent_prompt_option(config) == "Custom label (virt)"
+
+    def test_derives_label_from_name_and_description(self, tmp_path: Path) -> None:
+        path = _write_yaml(tmp_path, "control_plane", {
+            "name": "control_plane",
+            "description": "Etcd, API Server, Scheduler",
+            "components": ["Etcd"],
+        })
+        config = _load_agent_config(path)
+        assert format_agent_prompt_option(config) == (
+            "Control Plane — Etcd, API Server, Scheduler (control_plane)"
+        )
+
+    def test_derives_title_when_description_empty(self, tmp_path: Path) -> None:
+        path = _write_yaml(tmp_path, "foo_bar", {
+            "name": "foo_bar",
+            "components": ["Foo"],
+        })
+        config = _load_agent_config(path)
+        assert format_agent_prompt_option(config) == "Foo Bar — Foo Bar (foo_bar)"
 
 
 class TestDiscoverAgents:

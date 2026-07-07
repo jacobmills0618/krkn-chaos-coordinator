@@ -25,6 +25,7 @@ class AgentConfig:
     components: tuple[str, ...]
     docs: tuple[dict, ...] = ()
     discovery_jql: str | None = None
+    prompt_label: str | None = None
 
 
 def _load_agent_config(path: Path) -> AgentConfig:
@@ -60,13 +61,31 @@ def _load_agent_config(path: Path) -> AgentConfig:
     if discovery_jql is not None:
         discovery_jql = str(discovery_jql).strip() or None
 
+    prompt_label = data.get("prompt_label")
+    if prompt_label is not None:
+        prompt_label = str(prompt_label).strip() or None
+
     return AgentConfig(
         name=name,
         description=data.get("description", ""),
         components=tuple(components),
         docs=docs,
         discovery_jql=discovery_jql,
+        prompt_label=prompt_label,
     )
+
+
+def format_agent_prompt_option(config: AgentConfig) -> str:
+    """Build an AskUserQuestion option label for a domain agent.
+
+    Format: ``{Title} — {blurb} ({agent_id})``. Uses ``prompt_label`` from YAML
+    when set; otherwise derives title from ``name`` and blurb from ``description``.
+    """
+    if config.prompt_label:
+        return config.prompt_label
+    title = config.name.replace("_", " ").title()
+    blurb = config.description.strip() or title
+    return f"{title} — {blurb} ({config.name})"
 
 
 def discover_agents(config_dir: Path | None = None) -> dict[str, AgentConfig]:

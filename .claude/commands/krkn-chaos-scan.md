@@ -49,18 +49,47 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
 **Question 2 — Agent Scope:**
-- First, discover available agents dynamically:
+
+**Step 1 — Discover agents** (run from repo root):
+
 ```bash
 cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
-from src.agents.registry import discover_agents
+from src.agents.registry import discover_agents,format_agent_prompt_option
 for name, cfg in sorted(discover_agents().items()):
-    print(f'{name}: {cfg.description}')
+    print(f'{name}\t{format_agent_prompt_option(cfg)}')
 "
 ```
+
+**Step 2 — Canonical fixed options** (edit labels/order here; `agent_id` must match YAML `name`):
+
+| agent_id | Fixed option label |
+|----------|-------------------|
+| control_plane | Control plane — etcd, API server, scheduler (control_plane) |
+| networking | Networking — OVN, DNS, ingress (networking) |
+| node_machine | Node & machine — kubelet, MCO, bare metal (node_machine) |
+| operators_platform | Operators & platform — OLM, console, monitoring (operators_platform) |
+| storage | Storage — CSI, volumes, registry (storage) |
+| upgrade_lifecycle | Upgrade lifecycle — CVO, MCO, installer (upgrade_lifecycle) |
+| virtualization | OpenShift Virtualization — VM, migration, KubeVirt (virtualization) |
+
+**Step 3 — Merge into AskUserQuestion options:**
+
+1. Start with: `"All agents (Recommended)"`
+2. Build a map from Step 1 output: `agent_id` → tab-separated dynamic label (second column).
+3. For each row in the fixed table **whose `agent_id` appears in discovery output**, use the **fixed label** (ignore the dynamic label for that agent).
+4. For each discovered agent **not** in the fixed table, append the dynamic label from Step 1 (respects optional `prompt_label` in agent YAML via `format_agent_prompt_option`).
+5. Sort merged agent options alphabetically by `agent_id` (parse from trailing `(agent_id)` in each label).
+6. If a fixed-table agent is missing from discovery (YAML removed), **omit** that row — do not offer stale agents.
+7. Final options: `"All agents (Recommended)"` first, then sorted merged agent options.
+
 - Question: "Which domain agent(s) should run?"
 - multiSelect: true
-- Options: "All agents (Recommended)" plus one option per discovered agent (use name and description from the output above)
-- Note: Agents are auto-discovered from config/agents/*.yaml — new agents appear here automatically
+- Options: result of Step 3
+
+**Step 4 — Map selection → CLI:**
+
+- `"All agents (Recommended)"` → omit `--agent` (run all discovered agents)
+- Any other option → extract `agent_id` from the trailing `(agent_id)`; join with commas for `--agent virtualization,storage`
 
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
@@ -167,6 +196,7 @@ Map the user's interactive selections:
 - "365 days" → `--days 365`
 - "14 days" → `--days 14`
 - "All agents" → omit `--agent` flag
+- Specific agent(s) → extract `agent_id` from `(agent_id)` suffix in Question 2 labels → `--agent control_plane,networking`
 - "virtualization" only + OCP Virt checkbox only → `--agent virtualization --domain-filter-only`
 
 ## After Filter: Review virt PASS / SKIP (virtualization scans)
@@ -328,7 +358,7 @@ When both stages are enabled (default), stage 2 runs as a single `filter_bug()` 
 - Total usage logged at end: `TOKEN USAGE: X input + Y output = Z total, cost=$X, calls=N`
 
 ### Pluggable Agents (auto-discovered from config/agents/*.yaml):
-Agents are discovered dynamically. Each YAML defines: name, components, filter keywords, doc sources.
+Agents are discovered dynamically. Each YAML defines: name, description, components, optional `prompt_label`, filter keywords, doc sources. `/krkn-chaos-scan` merges a fixed label table with discovery output; new agents get dynamic labels via `format_agent_prompt_option()` unless listed in the fixed table.
 
 ### Knowledge Layer:
 - **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
