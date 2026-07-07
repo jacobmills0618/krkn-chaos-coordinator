@@ -210,9 +210,9 @@ def main():
 
     ran_virt = "virtualization" in agent_names
     if ran_virt and not args.no_filter_review:
-        from src.coordinator.filter_review_prompt import prompt_filter_review
+        from src.coordinator.filter_review import prompt_filter_review
         prompt_filter_review(
-            all_results,
+            results=all_results,
             agent_name="virtualization",
             export_path=args.filter_review_json,
         )

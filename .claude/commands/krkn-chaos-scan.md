@@ -84,12 +84,9 @@ for name, cfg in sorted(discover_agents().items()):
 
 - Question: "Which domain agent(s) should run?"
 - multiSelect: true
-- Options: result of Step 3
-
-**Step 4 — Map selection → CLI:**
-
-- `"All agents (Recommended)"` → omit `--agent` (run all discovered agents)
-- Any other option → extract `agent_id` from the trailing `(agent_id)`; join with commas for `--agent virtualization,storage`
+- Options: output above (`All agents (Recommended)` first)
+- Map selection → CLI: `"All agents"` → omit `--agent`; else extract `(agent_id)` suffix → `--agent virtualization,storage`
+- Edit fixed labels: `config/agents/scan_prompt.yaml`. Per-agent override: `prompt_label` in agent YAML.
 
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
@@ -201,66 +198,23 @@ Map the user's interactive selections:
 
 ## After Filter: Review virt PASS / SKIP (virtualization scans)
 
-After a **virtualization** scan or `ocp_virt_filter_eval` completes, **always** offer filter review using AskUserQuestion before gap/issue steps:
-
-**Batch 3 — Filter review (virtualization agent only):**
+After a virtualization scan, offer filter review (AskUserQuestion Batch 3) before gap/issue steps:
 
 - Question: "Review filter results?"
-- Options:
-  - "Show all PASS bugs (Recommended)" — full list with filter confidence, failure mode, injection method, JIRA URL
-  - "Show all SKIP bugs" — full list with skip reason and confidence
-  - "Show both PASS and SKIP"
-  - "Skip review"
+- Options: "Show all PASS bugs (Recommended)" | "Show all SKIP bugs" | "Show both PASS and SKIP" | "Skip review"
 
-**How to get the data:**
+Run with `--filter-review-json filter_review.json` (eval or main.py). To print saved lists:
 
-1. **Preferred — eval script** (no Neo4j, keyword filter only):
 ```bash
-cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -m src.evals.ocp_virt_filter_eval \
-  --release <VERSION> --max-bugs <MAX> --days <DAYS> \
-  [--domain-only] \
-  --filter-review-json filter_review.json
-```
-The script prints a summary, saves JSON, and prompts `1/2/3/4` in the terminal.
-
-2. **Full pipeline** (after FILTER phase):
-```bash
-PYTHONPATH=. python3 src/main.py --release <VERSION> --agent virtualization \
-  --max-bugs <MAX> --days <DAYS> \
-  [--domain-filter-only] \
-  --filter-review-json filter_review.json
-```
-
-3. **Read saved JSON** if the user chose review in Claude but the terminal already ran:
-```bash
-PYTHONPATH=. python3 -c "
-import json
-from pathlib import Path
-from src.coordinator.filter_review import format_filter_pass_list, format_filter_skip_list
-from src.models import Bug, FilterResult
-
-data = json.loads(Path('filter_review.json').read_text())
-def row_to_fr(r):
-    return FilterResult(
-        bug=Bug(key=r['key'], summary=r['summary'], description='', component=r['component'],
-                priority='', status='', created='', url=r['url']),
-        chaos_relevant=r['outcome']=='pass',
-        failure_mode=r.get('failure_mode'),
-        injection_method=r.get('injection_method'),
-        skip_reason=r.get('skip_reason'),
-        confidence=r['confidence'],
-    )
-passed = [row_to_fr(r) for r in data['passed']]
-skipped = [row_to_fr(r) for r in data['skipped']]
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
+from src.coordinator.filter_review import format_filter_pass_list, format_filter_skip_list, load_filter_review_json
+passed, skipped = load_filter_review_json('filter_review.json')
 print(format_filter_pass_list(passed))
 print(format_filter_skip_list(skipped))
 "
 ```
 
-**When presenting lists to the user in Claude**, format each bug as:
-`[CONFIDENCE%] OCPBUGS-XXXXX: summary (skip reason or injection method)`
-
-Use this review to tune `config/filters/ocp-virt.yaml` — false PASS → add skip keywords; false SKIP → add domain/chaos keywords.
+Present each bug as: `[CONFIDENCE%] OCPBUGS-XXXXX: summary`. Tune keywords in `config/filters/ocp-virt.yaml`.
 
 ## After the Scan: Post Gaps to GitHub
 
@@ -358,7 +312,7 @@ When both stages are enabled (default), stage 2 runs as a single `filter_bug()` 
 - Total usage logged at end: `TOKEN USAGE: X input + Y output = Z total, cost=$X, calls=N`
 
 ### Pluggable Agents (auto-discovered from config/agents/*.yaml):
-Agents are discovered dynamically. Each YAML defines: name, description, components, optional `prompt_label`, filter keywords, doc sources. `/krkn-chaos-scan` merges a fixed label table with discovery output; new agents get dynamic labels via `format_agent_prompt_option()` unless listed in the fixed table.
+Each YAML defines name, components, filter keywords, docs. Scan wizard labels: `config/agents/scan_prompt.yaml` (fixed) + `list_scan_prompt_options()` (dynamic for new agents).
 
 ### Knowledge Layer:
 - **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
@@ -428,6 +382,7 @@ Then **READ the actual matched scenario YAML** if one exists:
 ```bash
 cat /Users/sahil/krkn/scenarios/openshift/SCENARIO_FILE.yaml
 ```
+(Adjust path if your krkn clone lives elsewhere.)
 
 Now reason:
 - What does this scenario actually inject? (pod kill? node drain? network latency?)

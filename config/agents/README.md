@@ -18,8 +18,8 @@ components:
 | Field | Required | Description |
 |-------|----------|-------------|
 | `name` | Yes | Unique agent identifier (used in `--agent` flag) |
-| `description` | No | Short description shown in help text and used to build dynamic scan prompt labels |
-| `prompt_label` | No | Full AskUserQuestion option label for `/krkn-chaos-scan` when the agent is not in the fixed table (must end with `(agent_id)`) |
+| `description` | No | Short description; used for dynamic scan labels when not in `scan_prompt.yaml` |
+| `prompt_label` | No | Full scan wizard label when agent is not in `scan_prompt.yaml` (must end with `(agent_id)`) |
 | `components` | Yes | List of OCPBUGS component names this agent monitors |
 | `docs` | No | List of GitHub repos to ingest into ChromaDB for domain-specific context |
 

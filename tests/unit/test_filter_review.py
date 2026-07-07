@@ -5,6 +5,7 @@ from src.coordinator.filter_review import (
     filter_results_to_dict,
     format_filter_pass_list,
     format_filter_skip_list,
+    load_filter_review_json,
 )
 from src.models import AgentResult, Bug, FilterResult
 
@@ -69,3 +70,13 @@ class TestFilterReviewFormat:
         assert data["counts"] == {"passed": 1, "skipped": 1}
         assert data["passed"][0]["confidence"] == 0.85
         assert data["skipped"][0]["skip_reason"] is not None
+
+    def test_load_filter_review_json_roundtrip(self, tmp_path):
+        path = tmp_path / "review.json"
+        from src.coordinator.filter_review import write_filter_review_json
+
+        write_filter_review_json(path, [_pass_result()], [_skip_result()])
+        passed, skipped = load_filter_review_json(path)
+        assert len(passed) == 1
+        assert len(skipped) == 1
+        assert passed[0].bug.key == "OCPBUGS-1"

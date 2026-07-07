@@ -1,4 +1,4 @@
-"""Evaluate ocp-virt keyword filter against JIRA virtualization component bugs.
+"""Evaluate ocp-virt keyword filter against JIRA virtualization bugs.
 
 Usage:
     PYTHONPATH=. python -m src.evals.ocp_virt_filter_eval --release 4.21 --max-bugs 100
@@ -15,26 +15,11 @@ from dotenv import load_dotenv
 
 from src.agents.registry import discover_agents
 from src.apis.jira_client import JiraClient, JiraConfig
-from src.filter.chaos_filter import (
-    filter_bug,
-    filter_domain_bug,
-    get_filter_keywords,
-)
-from src.coordinator.filter_review import (
-    format_filter_pass_list,
-    format_filter_skip_list,
-    write_filter_review_json,
-)
-from src.coordinator.filter_review_prompt import prompt_filter_review_from_results
+from src.coordinator.filter_review import prompt_filter_review, write_filter_review_json
+from src.filter.chaos_filter import filter_bugs, filter_domain_bugs, get_filter_keywords
 
 logger = logging.getLogger(__name__)
-
 VIRT_AGENT = "virtualization"
-
-
-def _matches_virt_keyword(bug: Bug, virt_keywords: list[str]) -> bool:
-    text = f"{bug.summary} {bug.description}".lower()
-    return any(kw.lower() in text for kw in virt_keywords)
 
 
 def run_ocp_virt_filter_eval(
@@ -43,7 +28,10 @@ def run_ocp_virt_filter_eval(
     days: int = 60,
     domain_only: bool = False,
 ) -> dict:
-    """Fetch virt component bugs from JIRA and run keyword filter."""
+    """Fetch virt component bugs from JIRA and run the keyword filter.
+
+    Returns a report dict with counts, sample results, and full pass/skip lists.
+    """
     agents = discover_agents()
     if VIRT_AGENT not in agents:
         raise ValueError(f"Agent '{VIRT_AGENT}' not found in config/agents/")
@@ -56,7 +44,6 @@ def run_ocp_virt_filter_eval(
             api_token=os.environ.get("JIRA_API_TOKEN", ""),
         )
     )
-
     bugs = jira.discover_bugs(
         list(agent.components),
         days=days,
@@ -66,24 +53,14 @@ def run_ocp_virt_filter_eval(
     )
     logger.info("Fetched %d bugs from JIRA for virt components", len(bugs))
 
+    filter_fn = filter_domain_bugs if domain_only else filter_bugs
+    relevant, skipped = filter_fn(bugs, agent_name=VIRT_AGENT)
+
     _, virt_keywords = get_filter_keywords(VIRT_AGENT)
-    skip_keywords, _ = get_filter_keywords(VIRT_AGENT)
-
-    relevant = []
-    skipped = []
-    keyword_hits = 0
-
-    for bug in bugs:
-        if _matches_virt_keyword(bug, virt_keywords):
-            keyword_hits += 1
-        if domain_only:
-            result = filter_domain_bug(bug, agent_name=VIRT_AGENT)
-        else:
-            result = filter_bug(bug, agent_name=VIRT_AGENT)
-        if result.chaos_relevant:
-            relevant.append(result)
-        else:
-            skipped.append(result)
+    keyword_hits = sum(
+        1 for bug in bugs
+        if any(kw.lower() in f"{bug.summary} {bug.description}".lower() for kw in virt_keywords)
+    )
 
     return {
         "release": release,
@@ -101,15 +78,14 @@ def run_ocp_virt_filter_eval(
 
 
 def _print_report(report: dict) -> None:
+    """Print summary stats and sample PASS/SKIP bugs from an eval report."""
     total = report["total_bugs"]
     mode = "domain-only" if report.get("domain_only") else "chaos filter"
     print(f"\nOCP Virt filter eval ({mode}) — release {report['release']}")
-    print(f"Components: {len(report['components'])}")
-    print(f"Bugs fetched: {total}")
+    print(f"Components: {len(report['components'])}  |  Bugs fetched: {total}")
     print(f"Matched ocp-virt keyword in text: {report['keyword_hits']}")
     pass_label = "Domain-relevant (PASS)" if report.get("domain_only") else "Chaos-relevant (PASS)"
-    print(f"{pass_label}: {report['chaos_relevant']}")
-    print(f"Skipped: {report['skipped']}")
+    print(f"{pass_label}: {report['chaos_relevant']}  |  Skipped: {report['skipped']}")
     if total:
         print(f"Pass rate: {report['chaos_relevant'] / total:.1%}")
         print(f"Keyword hit rate: {report['keyword_hits'] / total:.1%}")
@@ -126,29 +102,17 @@ def _print_report(report: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """CLI entry point for ocp-virt filter evaluation."""
     load_dotenv()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     parser = argparse.ArgumentParser(description="Evaluate ocp-virt keyword filter")
-    parser.add_argument("--release", default="4.21", help="OCP release (default: 4.21)")
-    parser.add_argument("--max-bugs", type=int, default=100, help="Max bugs to fetch")
-    parser.add_argument("--days", type=int, default=365, help="Lookback window in days")
-    parser.add_argument(
-        "--domain-only",
-        action="store_true",
-        help="Domain filter only (ocp-virt keywords, no chaos/injection gate)",
-    )
-    parser.add_argument(
-        "--filter-review-json",
-        default=None,
-        metavar="PATH",
-        help="Write full PASS/SKIP lists to JSON",
-    )
-    parser.add_argument(
-        "--no-filter-review",
-        action="store_true",
-        help="Skip interactive filter review prompt after eval",
-    )
+    parser.add_argument("--release", default="4.21")
+    parser.add_argument("--max-bugs", type=int, default=100)
+    parser.add_argument("--days", type=int, default=365)
+    parser.add_argument("--domain-only", action="store_true")
+    parser.add_argument("--filter-review-json", default=None, metavar="PATH")
+    parser.add_argument("--no-filter-review", action="store_true")
     args = parser.parse_args(argv)
 
     if not os.environ.get("JIRA_API_TOKEN"):
@@ -164,10 +128,15 @@ def main(argv: list[str] | None = None) -> int:
     _print_report(report)
 
     mode = "domain-only" if report.get("domain_only") else "chaos filter"
+    metadata = {
+        "release": report["release"],
+        "domain_only": report.get("domain_only"),
+        "total_bugs": report["total_bugs"],
+    }
     if not args.no_filter_review:
-        prompt_filter_review_from_results(
-            report["relevant"],
-            report["skipped_results"],
+        prompt_filter_review(
+            passed=report["relevant"],
+            skipped=report["skipped_results"],
             export_path=args.filter_review_json,
             title_pass=f"OCP Virt — Filter PASS ({mode})",
             title_skip=f"OCP Virt — Filter SKIP ({mode})",
@@ -177,11 +146,7 @@ def main(argv: list[str] | None = None) -> int:
             args.filter_review_json,
             report["relevant"],
             report["skipped_results"],
-            metadata={
-                "release": report["release"],
-                "domain_only": report.get("domain_only"),
-                "total_bugs": report["total_bugs"],
-            },
+            metadata=metadata,
         )
         print(f"\nFilter review saved to {args.filter_review_json}")
 

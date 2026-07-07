@@ -88,6 +88,28 @@ def format_agent_prompt_option(config: AgentConfig) -> str:
     return f"{title} — {blurb} ({config.name})"
 
 
+def _load_fixed_scan_labels(config_dir: Path | None = None) -> dict[str, str]:
+    """Load curated scan wizard labels from config/agents/scan_prompt.yaml."""
+    path = (config_dir or CONFIG_DIR) / "scan_prompt.yaml"
+    if not path.exists():
+        return {}
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    return {str(k): str(v) for k, v in (data.get("fixed_labels") or {}).items()}
+
+
+def list_scan_prompt_options(config_dir: Path | None = None) -> list[str]:
+    """AskUserQuestion options: fixed labels + dynamic labels for new agents."""
+    directory = config_dir or CONFIG_DIR
+    agents = discover_agents(directory)
+    fixed = _load_fixed_scan_labels(directory)
+    options = [
+        fixed[name] if name in fixed else format_agent_prompt_option(cfg)
+        for name, cfg in sorted(agents.items())
+    ]
+    return ["All agents (Recommended)", *options]
+
+
 def discover_agents(config_dir: Path | None = None) -> dict[str, AgentConfig]:
     """Scan config/agents/*.yaml and return registered agents.
 
@@ -102,6 +124,8 @@ def discover_agents(config_dir: Path | None = None) -> dict[str, AgentConfig]:
 
     agents: dict[str, AgentConfig] = {}
     for path in sorted(directory.glob("*.yaml")):
+        if path.name == "scan_prompt.yaml":
+            continue
         try:
             config = _load_agent_config(path)
             if config.name in agents:

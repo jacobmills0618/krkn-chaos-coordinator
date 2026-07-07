@@ -153,16 +153,62 @@ KRKN_CAPABILITIES = [
 # Filter logic
 # ---------------------------------------------------------------------------
 
+def _is_stub_bug(text: str, summary: str) -> bool:
+    """Return True for JIRA stub tickets or clone-of-issue placeholders."""
+    return "clone of issue" in text[:200] or "[stub]" in summary.lower()
+
+
+def _skip_on_keyword(bug: Bug, text: str, skip_keywords: list[str], *, prefix: str) -> FilterResult | None:
+    """Return a SKIP FilterResult if *text* matches any skip keyword, else None."""
+    for keyword in skip_keywords:
+        if keyword.lower() in text:
+            return FilterResult(
+                bug=bug,
+                chaos_relevant=False,
+                skip_reason=f"{prefix}: matches skip keyword '{keyword}'",
+                confidence=0.95,
+            )
+    return None
+
+
+def _partition_bugs(
+    bugs: list[Bug],
+    filter_fn,
+    agent_name: str | None,
+    *,
+    pass_label: str,
+    skip_label: str,
+) -> tuple[list[FilterResult], list[FilterResult]]:
+    """Apply *filter_fn* to each bug and split into passed vs skipped lists."""
+    relevant: list[FilterResult] = []
+    skipped: list[FilterResult] = []
+
+    for bug in bugs:
+        result = filter_fn(bug, agent_name)
+        if result.chaos_relevant:
+            relevant.append(result)
+            detail = result.failure_mode or result.injection_method
+            logger.info("%s %s: %s", pass_label, bug.key, detail)
+        else:
+            skipped.append(result)
+            logger.info("%s %s: %s", skip_label, bug.key, result.skip_reason)
+
+    logger.info(
+        "Filter result: %d relevant, %d skipped out of %d total",
+        len(relevant), len(skipped), len(bugs),
+    )
+    return relevant, skipped
+
+
 def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
     """Determine if a bug is chaos-relevant using keyword heuristics.
 
-    Part 1: Is this a failure mode? (vs code bug, CVE, UI issue)
-    Part 2: Can krkn inject this? (match against capabilities)
+    Applies skip keywords, chaos keywords, and krkn injection-method matching.
     """
     skip_keywords, chaos_keywords = get_filter_keywords(agent_name)
     text = f"{bug.summary} {bug.description}".lower()
 
-    if "clone of issue" in text[:200] or "[stub]" in bug.summary.lower():
+    if _is_stub_bug(text, bug.summary):
         return FilterResult(
             bug=bug,
             chaos_relevant=False,
@@ -170,14 +216,9 @@ def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
             confidence=0.95,
         )
 
-    for keyword in skip_keywords:
-        if keyword.lower() in text:
-            return FilterResult(
-                bug=bug,
-                chaos_relevant=False,
-                skip_reason=f"Not chaos-relevant: matches skip keyword '{keyword}'",
-                confidence=0.95,
-            )
+    skipped = _skip_on_keyword(bug, text, skip_keywords, prefix="Not chaos-relevant")
+    if skipped:
+        return skipped
 
     matched_keywords = [kw for kw in chaos_keywords if kw.lower() in text]
     if not matched_keywords:
@@ -207,32 +248,20 @@ def filter_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
         "certificate expired", "clock skew", "data loss", "data corruption",
         "disk full", "memory leak", "quorum", "split brain",
     ]
-    has_specific = any(kw in matched_keywords for kw in specific_keywords)
-
-    if has_specific:
-        return FilterResult(
-            bug=bug,
-            chaos_relevant=True,
-            failure_mode=failure_mode,
-            injection_method=injection_method,
-            confidence=0.85,
-        )
-
+    confidence = 0.85 if any(kw in matched_keywords for kw in specific_keywords) else 0.5
     return FilterResult(
         bug=bug,
         chaos_relevant=True,
         failure_mode=failure_mode,
         injection_method=injection_method,
-        confidence=0.5,
+        confidence=confidence,
     )
 
 
 def filter_domain_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
     """Domain-only filter — ocp-virt keywords without chaos/injection gates.
 
-    Use to validate domain keyword coverage before applying the full chaos filter.
-    Only applies skip keywords and domain keywords from ocp-virt.yaml (not
-    common.yaml chaos keywords or krkn injection matching).
+    Use with ``--domain-filter-only`` to tune virt keyword coverage.
     """
     domain = get_domain_filter_keywords(agent_name)
     if domain is None:
@@ -244,7 +273,7 @@ def filter_domain_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
     skip_keywords, domain_keywords = domain
     text = f"{bug.summary} {bug.description}".lower()
 
-    if "clone of issue" in text[:200] or "[stub]" in bug.summary.lower():
+    if _is_stub_bug(text, bug.summary):
         return FilterResult(
             bug=bug,
             chaos_relevant=False,
@@ -252,14 +281,9 @@ def filter_domain_bug(bug: Bug, agent_name: str | None = None) -> FilterResult:
             confidence=0.95,
         )
 
-    for keyword in skip_keywords:
-        if keyword.lower() in text:
-            return FilterResult(
-                bug=bug,
-                chaos_relevant=False,
-                skip_reason=f"Not domain-relevant: matches skip keyword '{keyword}'",
-                confidence=0.95,
-            )
+    skipped = _skip_on_keyword(bug, text, skip_keywords, prefix="Not domain-relevant")
+    if skipped:
+        return skipped
 
     matched = [kw for kw in domain_keywords if kw.lower() in text]
     if not matched:
@@ -282,47 +306,14 @@ def filter_domain_bugs(
     bugs: list[Bug], agent_name: str | None = None,
 ) -> tuple[list[FilterResult], list[FilterResult]]:
     """Filter bugs using domain keywords only (no chaos/injection gate)."""
-    relevant = []
-    skipped = []
-
-    for bug in bugs:
-        result = filter_domain_bug(bug, agent_name)
-        if result.chaos_relevant:
-            relevant.append(result)
-            logger.info("DOMAIN PASS %s: %s", bug.key, result.failure_mode)
-        else:
-            skipped.append(result)
-            logger.info("DOMAIN SKIP %s: %s", bug.key, result.skip_reason)
-
-    logger.info(
-        "Domain filter result: %d relevant, %d skipped out of %d total",
-        len(relevant), len(skipped), len(bugs),
+    return _partition_bugs(
+        bugs, filter_domain_bug, agent_name, pass_label="DOMAIN PASS", skip_label="DOMAIN SKIP",
     )
-    return relevant, skipped
 
 
 def filter_bugs(bugs: list[Bug], agent_name: str | None = None) -> tuple[list[FilterResult], list[FilterResult]]:
     """Filter a list of bugs into chaos-relevant and non-relevant."""
-    relevant = []
-    skipped = []
-
-    for bug in bugs:
-        result = filter_bug(bug, agent_name)
-        if result.chaos_relevant:
-            relevant.append(result)
-            logger.info(
-                "PASS %s: %s (injection: %s)",
-                bug.key, result.failure_mode, result.injection_method,
-            )
-        else:
-            skipped.append(result)
-            logger.info("SKIP %s: %s", bug.key, result.skip_reason)
-
-    logger.info(
-        "Filter result: %d relevant, %d skipped out of %d total",
-        len(relevant), len(skipped), len(bugs),
-    )
-    return relevant, skipped
+    return _partition_bugs(bugs, filter_bug, agent_name, pass_label="PASS", skip_label="SKIP")
 
 
 def _extract_failure_mode(text: str, matched_keywords: list[str]) -> str:

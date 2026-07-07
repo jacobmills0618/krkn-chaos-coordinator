@@ -13,6 +13,7 @@ from src.agents.registry import (
     _load_agent_config,
     discover_agents,
     format_agent_prompt_option,
+    list_scan_prompt_options,
 )
 
 
@@ -116,6 +117,27 @@ class TestFormatAgentPromptOption:
         })
         config = _load_agent_config(path)
         assert format_agent_prompt_option(config) == "Foo Bar — Foo Bar (foo_bar)"
+
+
+class TestListScanPromptOptions:
+    def test_merges_fixed_and_dynamic_labels(self, tmp_path: Path) -> None:
+        _write_yaml(tmp_path, "alpha", {
+            "name": "alpha",
+            "description": "Alpha area",
+            "components": ["A"],
+        })
+        _write_yaml(tmp_path, "beta", {
+            "name": "beta",
+            "description": "Beta area",
+            "components": ["B"],
+        })
+        (tmp_path / "scan_prompt.yaml").write_text(
+            "fixed_labels:\n  alpha: Fixed Alpha — curated (alpha)\n"
+        )
+        options = list_scan_prompt_options(config_dir=tmp_path)
+        assert options[0] == "All agents (Recommended)"
+        assert "Fixed Alpha — curated (alpha)" in options
+        assert "Beta — Beta area (beta)" in options
 
 
 class TestDiscoverAgents:
