@@ -24,6 +24,11 @@ skip_keywords:
   - "skopeo"
   - "below the sea ui"
   - "dpll pin"
+  - "component readiness"
+  - "ci job"
+  - "permafailing"
+  - "@patternfly"
+  - "add approver"
 
 ocp-virt_keywords:
   - "openshift virtualization"
