@@ -92,6 +92,7 @@ class GapAnalysis:
 class AgentResult:
     agent_name: str
     bugs_discovered: list[Bug] = field(default_factory=list)
+    bugs_passed_filter: list[FilterResult] = field(default_factory=list)
     bugs_filtered_out: list[FilterResult] = field(default_factory=list)
     bugs_matched: list[ScenarioMatch] = field(default_factory=list)
     gaps: list[GapAnalysis] = field(default_factory=list)

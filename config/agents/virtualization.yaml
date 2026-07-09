@@ -1,0 +1,24 @@
+name: virtualization
+description: "OpenShift Virtualization / CNV / KubeVirt"
+components:
+  - "Virtualization"
+  - "Documentation / Virtualization"
+  - "HyperShift / OCP Virtualization"
+  - "Cloud Compute / KubeVirt Provider"
+  - "Console Kubevirt Plugin"
+  - "Installer / OpenShift on KubeVirt"
+  - "ocp-mcp-server / kubevirt"
+  - "LP--CNV"
+# Backfill: many virt bugs are filed under networking/HyperShift/etc.
+discovery_jql: >-
+  project = OCPBUGS AND (
+    text ~ "virt-launcher" OR text ~ "kubevirt" OR text ~ "virt-controller"
+    OR text ~ "live migration" OR summary ~ "VM "
+  )
+docs:
+  - type: github
+    owner: kubevirt
+    repo: kubevirt
+    path: docs
+  - type: url
+    url: https://kubevirt.io/user-guide/architecture/

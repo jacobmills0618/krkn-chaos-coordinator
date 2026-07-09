@@ -27,13 +27,17 @@ If the user query is NOT empty, run in **Targeted Query** mode:
 - "what etcd bugs and coverage do we have" → Search JIRA for etcd component bugs + search ChromaDB for etcd scenarios + report gaps
 - "does krkn cover OVN pod failures" → Search scenarios for OVN, read the YAML files, report what's covered vs missing
 - "analyze OCPBUGS-12345" → Pull that specific bug, run FILTER/MAP/ANALYZE on just that bug
+- "virtualization domain filter only 100 bugs" → `--agent virtualization --domain-filter-only --max-bugs 100 --days 365`
+- "test virt ocp-virt keywords without chaos filter" → `--agent virtualization --domain-filter-only --max-bugs 100 --days 365`
 - "what gaps exist for networking" → Query Neo4j for networking gap counts + search ChromaDB for networking scenarios
 - "show me all hog scenarios" → Search ChromaDB/krkn docs for hog scenario plugins and list them
 - "what components have the most open gaps" → Query Neo4j gap counts
 
 ## Interactive Setup (Full Scan only)
 
-Before running the pipeline, ask the user these questions using AskUserQuestion. Ask all 4 in a single AskUserQuestion call:
+Before running the pipeline, ask the user these questions using AskUserQuestion.
+
+**Batch 1 — ask Questions 1–4 in a single AskUserQuestion call:**
 
 **Question 1 — OCP Version:**
 - Question: "Which OpenShift version(s) to scan?"
@@ -45,22 +49,50 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
 **Question 2 — Agent Scope:**
+
+**Step 1 — Discover agents:**
+
 - First, discover available agents dynamically:
 ```bash
 cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
-from src.agents.registry import discover_agents
+from src.agents.registry import discover_agents,format_agent_prompt_option
 for name, cfg in sorted(discover_agents().items()):
-    print(f'{name}: {cfg.description}')
+    print(f'{name}\t{format_agent_prompt_option(cfg)}')
 "
 ```
+
+**Step 2 — Canonical fixed options** (edit labels/order here; `agent_id` must match YAML `name`):
+
+| agent_id | Fixed option label |
+|----------|-------------------|
+| control_plane | Control plane — etcd, API server, scheduler (control_plane) |
+| networking | Networking — OVN, DNS, ingress (networking) |
+| node_machine | Node & machine — kubelet, MCO, bare metal (node_machine) |
+| operators_platform | Operators & platform — OLM, console, monitoring (operators_platform) |
+| storage | Storage — CSI, volumes, registry (storage) |
+| upgrade_lifecycle | Upgrade lifecycle — CVO, MCO, installer (upgrade_lifecycle) |
+| virtualization | OpenShift Virtualization — VM, migration, KubeVirt (virtualization) |
+
+**Step 3 — Merge into AskUserQuestion options:**
+
+1. Start with: `"All agents (Recommended)"`
+2. Build a map from Step 1 output: `agent_id` → tab-separated dynamic label (second column).
+3. For each row in the fixed table **whose `agent_id` appears in discovery output**, use the **fixed label** (ignore the dynamic label for that agent).
+4. For each discovered agent **not** in the fixed table, append the dynamic label from Step 1 (respects optional `prompt_label` in agent YAML via `format_agent_prompt_option`).
+5. Sort merged agent options alphabetically by `agent_id` (parse from trailing `(agent_id)` in each label).
+6. If a fixed-table agent is missing from discovery (YAML removed), **omit** that row — do not offer stale agents.
+7. Final options: `"All agents (Recommended)"` first, then sorted merged agent options.
+
 - Question: "Which domain agent(s) should run?"
 - multiSelect: true
-- Options: "All agents (Recommended)" plus one option per discovered agent (use name and description from the output above)
-- Note: Agents are auto-discovered from config/agents/*.yaml — new agents appear here automatically
+- Options: output above (`All agents (Recommended)` first)
+- Map selection → CLI: `"All agents"` → omit `--agent`; else extract `(agent_id)` suffix → `--agent virtualization,storage`
+- Edit fixed labels: `config/agents/scan_prompt.yaml`. Per-agent override: `prompt_label` in agent YAML.
 
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
 - Options:
+  - "365 days (Recommended for virt)" — Full year (needed for virtualization agent sample size)
   - "14 days (Recommended)" — Last 2 weeks of bugs
   - "7 days" — Last week only (quick scan)
   - "30 days" — Full month (more thorough)
@@ -78,6 +110,46 @@ Map selections to CLI flags (use the days value from Question 3):
 - "Quick scan" → `--max-bugs 50 --use-llm`
 - "Keyword only" → `--max-bugs 2000` (no --use-llm)
 
+**Batch 2 — Filter stages (only when virtualization is the sole selected agent):**
+
+If the user selected **only** `virtualization` (not "All agents", not multiple agents), ask a **second** AskUserQuestion with multiSelect:
+
+**Question 5 — Filter stages:**
+- Question: "Select which filter layers should be applied? (virtualization agent)"
+- multiSelect: true
+- allow_multiple: true
+- Options:
+  - "OpenShift Virtualization (Broad Primary Filtering)" — Domain filter: common ocp-virt keywords + virt skip list. Answers: *Is this an OCP Virt bug?*
+  - "Krkn Chaos (Specific Secondary Filtering)" — Chaos filter: common chaos keywords + krkn injection matching. Answers: *Is this chaos-testable?*
+- Default if user picks nothing: treat as both checked.
+
+Map checkbox combinations to CLI flags:
+
+| OpenShift Virtualization | Krkn Chaos | CLI flags | What runs |
+|--------------------------|------------|-----------|-----------|
+| ✓ | ✓ | *(none)* | Full keyword filter (`filter_bug`) — domain + chaos gates |
+| ✓ | | `--domain-filter-only` | Domain filter only (`filter_domain_bug`) — tune ocp-virt keywords |
+| | ✓ | *(none)* | Standard chaos keyword filter (same as both for `--agent virtualization`) |
+| | | — | Invalid — re-ask; at least one stage required |
+
+**Important constraints:**
+- `--domain-filter-only` requires `--agent virtualization` alone (no `--use-llm`).
+- If user selected "All agents" or multiple agents including virtualization, **skip Question 5** and use the default full chaos filter for every agent.
+- For non-virtualization agents, only the Krkn Chaos filter applies (Question 5 is not shown).
+
+**Virt domain-only filter tuning:**
+
+When the user selects **OpenShift Virtualization only** (no Krkn Chaos), run the pipeline with `--domain-filter-only` (Neo4j required):
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 src/main.py \
+  --release <VERSION> --agent virtualization \
+  --max-bugs <MAX> --days <DAYS> --domain-filter-only \
+  [--filter-review-json filter_review.json] [--no-filter-review]
+```
+
+For full keyword filter (domain + chaos), omit `--domain-filter-only`.
+
 ## Running the Pipeline
 
 After getting answers, run the pipeline using `main.py`:
@@ -92,9 +164,17 @@ cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@
   --parallel
 ```
 
-Note: Always include `--parallel` when running multiple agents (it's the default behavior for multi-agent runs). Only omit it for single-agent runs.
+**Filter stage flags (virtualization agent only):**
+- Both "OpenShift Virtualization" and "Krkn Chaos" checked → omit `--domain-filter-only`
+- Only "OpenShift Virtualization" checked → add `--domain-filter-only` (do **not** add `--use-llm`)
+- Only "Krkn Chaos" checked → omit `--domain-filter-only`
+
+Note: Always include `--parallel` when running multiple agents. Omit for single-agent runs.
 
 **Examples:**
+- Virt domain filter only: `--release 4.21 --agent virtualization --max-bugs 100 --days 365 --domain-filter-only`
+- Virt full keyword filter: `--release 4.21 --agent virtualization --max-bugs 100 --days 365`
+- Virt full LLM scan: `--release 4.21 --agent virtualization --max-bugs 100 --days 365 --use-llm`
 - Single version, single agent: `--release 4.21 --agent control_plane`
 - Multiple versions: `--release 4.20,4.21`
 - Multiple agents: `--agent control_plane,networking,storage`
@@ -104,9 +184,33 @@ Note: Always include `--parallel` when running multiple agents (it's the default
 - Deep scan: `--max-bugs 2000 --days 60`
 
 Map the user's interactive selections:
-- "All bugs" → `--max-bugs 2000`
+- "All bugs" / full scan → `--max-bugs 2000`
+- "Quick scan" → `--max-bugs 50`
+- "365 days" → `--days 365`
 - "14 days" → `--days 14`
 - "All agents" → omit `--agent` flag
+- Specific agent(s) → extract `agent_id` from `(agent_id)` suffix in Question 2 labels → `--agent control_plane,networking`
+- "virtualization" only + OCP Virt checkbox only → `--agent virtualization --domain-filter-only`
+
+## After Filter: Review virt PASS / SKIP (virtualization scans)
+
+After a virtualization scan, offer filter review (AskUserQuestion Batch 3) before gap/issue steps:
+
+- Question: "Review filter results?"
+- Options: "Show all PASS bugs (Recommended)" | "Show all SKIP bugs" | "Show both PASS and SKIP" | "Skip review"
+
+Run with `--filter-review-json filter_review.json` via `main.py`. To print saved lists:
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
+from src.coordinator.filter_review import format_filter_pass_list, format_filter_skip_list, load_filter_review_json
+passed, skipped = load_filter_review_json('filter_review.json')
+print(format_filter_pass_list(passed))
+print(format_filter_skip_list(skipped))
+"
+```
+
+Present each bug as: `[CONFIDENCE%] OCPBUGS-XXXXX: summary`. Tune keywords in `config/filters/ocp-virt.yaml`.
 
 ## After the Scan: Post Gaps to GitHub
 
@@ -156,11 +260,30 @@ Each agent runs the full pipeline for its component area.
 - Z-stream enrichment from OpenShift release controller (fix commits, images)
 - Neo4j dedup: already-analyzed bugs get status update only (zero LLM cost)
 
-### FILTER (3-tier: keyword → semantic cache → LLM)
+### FILTER (keyword → optional domain → semantic cache → LLM)
+
+**Virtualization agent — two-stage keyword filter:**
+
+1. **OpenShift Virtualization** (`--domain-filter-only`)
+   - Source: `config/filters/ocp-virt.yaml`
+   - Applies: virt domain keywords + virt skip keywords
+   - Skips: common chaos keywords, krkn injection matching
+   - Log prefix: `DOMAIN PASS` / `DOMAIN SKIP`
+
+2. **Krkn Chaos** (default `filter_bug` for `--agent virtualization`)
+   - Source: `common.yaml` + agent YAML + `ocp-virt.yaml` merged into chaos keywords
+   - Applies: skip keywords, chaos keywords, krkn injection-method matching
+   - Log prefix: `PASS` / `SKIP`
+
+When both stages are enabled (default), stage 2 runs as a single `filter_bug()` call — effectively domain keywords plus chaos gates together.
+
+**All agents — standard 3-tier filter when `--use-llm`:**
 - Layer 1: Keyword pre-filter (config/filters/common.yaml + agent overrides). Zero tokens.
 - Layer 2: Semantic cache in ChromaDB (cosine distance < 0.15). Zero tokens.
 - Layer 3: LLM classification via claude_code provider (--bare --system-prompt for minimal token usage ~2,700/call)
 - Confidence < 80 auto-escalates from Sonnet to Opus
+
+`--domain-filter-only` is incompatible with `--use-llm`.
 
 ### MAP (ChromaDB RAG + LLM reasoning)
 - Per-component ChromaDB search (scenarios + krkn docs + OCP docs)
@@ -185,7 +308,7 @@ Each agent runs the full pipeline for its component area.
 - Total usage logged at end: `TOKEN USAGE: X input + Y output = Z total, cost=$X, calls=N`
 
 ### Pluggable Agents (auto-discovered from config/agents/*.yaml):
-Agents are discovered dynamically. Each YAML defines: name, components, filter keywords, doc sources.
+Each YAML defines name, components, filter keywords, docs. Scan wizard labels: `config/agents/scan_prompt.yaml` (fixed) + `list_scan_prompt_options()` (dynamic for new agents).
 
 ### Knowledge Layer:
 - **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
@@ -255,6 +378,7 @@ Then **READ the actual matched scenario YAML** if one exists:
 ```bash
 cat /Users/sahil/krkn/scenarios/openshift/SCENARIO_FILE.yaml
 ```
+(Adjust path if your krkn clone lives elsewhere.)
 
 Now reason:
 - What does this scenario actually inject? (pod kill? node drain? network latency?)
