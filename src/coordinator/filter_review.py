@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 from src.models import AgentResult, Bug, FilterResult
@@ -193,6 +194,13 @@ def prompt_filter_review(
     metadata = {"agent": agent_name, "passed": len(passed), "skipped": len(skipped)}
     if export_path:
         print(f"\nFilter review saved to {write_filter_review_json(export_path, passed, skipped, metadata=metadata)}")
+
+    if not sys.stdin.isatty():
+        print(
+            "\nNon-interactive terminal — skipping filter review menu. "
+            "Use krkn-chaos-scan Batch 3 (AskUserQuestion) or re-run in a TTY without --no-filter-review."
+        )
+        return
 
     print(_REVIEW_MENU.format(passed=len(passed), skipped=len(skipped)))
 

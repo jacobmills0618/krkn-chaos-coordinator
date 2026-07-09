@@ -50,7 +50,7 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
   - "All (4.19, 4.20, 4.21, 4.22)" — Scan across all supported versions
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
-**Question 2 — Agent Scope (Tab 2):**
+**Question 2 — Agent Scope:**
 
 Discover agents first, then embed the full list in the **question text** (not as button options):
 
@@ -138,10 +138,12 @@ When the user selects **OpenShift Virtualization only** (no Krkn Chaos), run the
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 src/main.py \
   --release <VERSION> --agent virtualization \
   --max-bugs <MAX> --days <DAYS> --domain-filter-only \
-  [--filter-review-json filter_review.json] [--no-filter-review]
+  --filter-review-json filter_review.json --no-filter-review
 ```
 
-For full keyword filter (domain + chaos), omit `--domain-filter-only`.
+**Important:** When running via this slash command (agent Bash), always pass **`--no-filter-review`**. The terminal `input()` menu in `main.py` does not work in non-interactive Bash — filter review happens in **Batch 3 (AskUserQuestion)** below, not inside `main.py`.
+
+For full keyword filter (domain + chaos), omit `--domain-filter-only` but still use `--filter-review-json` + `--no-filter-review` when reviewing via Batch 3.
 
 ## Running the Pipeline
 
@@ -187,23 +189,46 @@ Map the user's interactive selections:
 
 ## After Filter: Review virt PASS / SKIP (virtualization scans)
 
-After a virtualization scan, offer filter review (AskUserQuestion Batch 3) before gap/issue steps:
+**Do this only after** `main.py` finishes and `--filter-review-json` wrote the file.
+
+**Batch 3 — AskUserQuestion (required before printing any bug lists):**
 
 - Question: "Review filter results?"
-- Options: "Show all PASS bugs (Recommended)" | "Show all SKIP bugs" | "Show both PASS and SKIP" | "Skip review"
+- Options (pick one):
+  - "Show all PASS bugs (Recommended)"
+  - "Show all SKIP bugs"
+  - "Show both PASS and SKIP"
+  - "Skip review"
 
-Run with `--filter-review-json filter_review.json` via `main.py`. To print saved lists:
+**Do not** dump PASS/SKIP lists or write summary code until the user answers Batch 3.
 
+After the user selects an option, load the JSON and print **only what they chose**:
+
+**If PASS (option 1):**
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
-from src.coordinator.filter_review import format_filter_pass_list, format_filter_skip_list, load_filter_review_json
-passed, skipped = load_filter_review_json('filter_review.json')
+from src.coordinator.filter_review import format_filter_pass_list, load_filter_review_json
+passed, _ = load_filter_review_json('filter_review.json')
 print(format_filter_pass_list(passed))
+"
+```
+
+**If SKIP (option 2):**
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
+from src.coordinator.filter_review import format_filter_skip_list, load_filter_review_json
+_, skipped = load_filter_review_json('filter_review.json')
 print(format_filter_skip_list(skipped))
 "
 ```
 
+**If both (option 3):** run the PASS command, then the SKIP command.
+
+**If skip review (option 4):** do not run either command.
+
 Present each bug as: `[CONFIDENCE%] OCPBUGS-XXXXX: summary`. Tune keywords in `config/filters/ocp-virt.yaml`.
+
+**Running `main.py` directly in your own terminal (not agent Bash)?** Omit `--no-filter-review` to get the numbered menu via `input()` instead of Batch 3.
 
 ## After the Scan: Post Gaps to GitHub
 
