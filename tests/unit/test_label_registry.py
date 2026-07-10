@@ -178,6 +178,21 @@ class TestLabelDiscoveryDisclaimer:
         assert "openshift_virtualization" in disclaimer
         assert 'select "No" for label discovery' in disclaimer
 
+    def test_includes_global_exact_count_when_provided(self, tmp_path: Path) -> None:
+        _write_yaml(tmp_path, "openshift_virtualization", {
+            "name": "openshift_virtualization",
+            "description": "Virt labels",
+            "label_substrings": ["cnv"],
+        })
+        disclaimer = format_label_discovery_disclaimer(
+            ["openshift_virtualization"],
+            config_dir=tmp_path,
+            exact_bug_count=13,
+            days=365,
+        )
+        assert "Global exact label matches (365d): 13 OCPBUGS bugs" in disclaimer
+        assert "do not sum those across agents" in disclaimer.lower()
+
 
 class TestListLabelDiscoveryAskOptions:
 

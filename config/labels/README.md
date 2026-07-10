@@ -1,6 +1,6 @@
 # JIRA Label Discovery Categories
 
-Agents primarily discover bugs via **JIRA Component** (`components:` in each agent YAML). Many related bugs are filed under the wrong component — or no virt component at all — but carry domain-specific **JIRA labels**.
+Agents primarily discover bugs via **JIRA Component** (`components:` in each agent YAML). Many related bugs are filed under various components,yet carry domain-specific **JIRA labels**.
 
 Label categories add an optional **discovery backfill** that runs on **every selected agent** after component search. Component discovery always runs first; label backfill adds tickets that match label substrings but were not already found.
 
@@ -37,7 +37,7 @@ prompt_label: "My Domain — custom wizard label (my_domain)"   # optional
 |-------|----------|-------------|
 | `name` | Yes | Unique category ID (used in `--discovery-label-categories`) |
 | `description` | No | Blurb for dynamic scan wizard labels |
-| `label_substrings` | Yes | Match any JIRA site label **containing** these strings (case-insensitive) |
+| `label_substrings` | Yes | Exact JIRA label names used in JQL (`labels = "name"`) |
 | `prompt_label` | No | Full wizard label when category is not in `scan_prompt.yaml` (must end with `(category_id)`) |
 
 ## Fixed Wizard Labels (`scan_prompt.yaml`)
@@ -56,16 +56,21 @@ Categories **not** listed in `fixed_labels` get a dynamic label from `format_lab
 
 ## How Label Matching Works
 
-JIRA JQL only supports exact label matches (`labels in ("foo")`), not substring search on the label field. The coordinator:
+JIRA JQL only supports **exact** label matches (`labels = "cnv"`). Each value in `label_substrings` is treated as an exact label name and combined with OR:
 
-1. Fetches all site labels from `/rest/api/3/label`
-2. Filters client-side for labels containing any configured substring
-3. Runs `project = OCPBUGS AND labels in (...)` backfill queries (batched)
-4. Deduplicates against bugs already found via components or text JQL
+```jql
+project = OCPBUGS AND (labels = "cnv" OR labels = "kubevirt" OR ...)
+```
+
+At run start, the coordinator prints the **global exact match count** for the configured window (e.g. `Global exact label matches (365d): 13 OCPBUGS bugs`). That number matches what you see in JIRA for the same JQL.
+
+Per-agent log lines such as `+13 added` count bugs **newly added to that agent's pool** after component search — the same bug may appear in multiple agents' pools. **Do not sum those `+N added` lines across agents**; use the global count in the run header.
+
+Red Hat JIRA blocks `/rest/api/3/label` (401); discovery uses the search API only.
 
 ## Built-in Category: OpenShift Virtualization
 
-`openshift_virtualization.yaml` matches labels containing:
+`openshift_virtualization.yaml` matches bugs with any of these **exact** labels:
 
 - `cnv`
 - `kubevirt`

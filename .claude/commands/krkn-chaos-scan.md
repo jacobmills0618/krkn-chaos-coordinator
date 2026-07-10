@@ -157,12 +157,12 @@ Map selection → CLI:
 
 **Example (one category today):** user types `openshift_virtualization` → `--discovery-label-categories openshift_virtualization`
 
-**Step 3 — After the pipeline runs**, repeat the disclaimer from `main.py` output in your summary when label discovery was enabled:
+**Step 3 — After the pipeline runs**, repeat the disclaimer from `main.py` output in your summary when label discovery was enabled. It includes the **global exact label count** — report that number, not sums of per-agent `+N added` log lines:
 
 ```
-DISCOVERY NOTE: JIRA bug search included label discovery using: OpenShift Virtualization — CNV, KubeVirt, VM labels (openshift_virtualization). 
-Component-based search also ran for each agent. 
-For component-only discovery, select "No" for label discovery in /krkn-chaos-scan.
+DISCOVERY NOTE: JIRA bug search included label discovery using: ...
+Global exact label matches (365d): 13 OCPBUGS bugs (authoritative JIRA total for configured label names).
+Per-agent log lines show only bugs ADDED to that agent's pool — do not sum those across agents.
 ```
 
 If the user chose **No**, do not pass `--discovery-label-categories` and do not print the label disclaimer.

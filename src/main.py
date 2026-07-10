@@ -168,13 +168,26 @@ def main():
             )
             return
         discovery_label_substrings = resolve_label_substrings(category_ids)
-        disclaimer = format_label_discovery_disclaimer(category_ids)
+        from src.apis.jira_client import build_exact_label_substrings_jql
+
+        exact_jql = build_exact_label_substrings_jql(discovery_label_substrings)
+        global_label_jql = (
+            f"({exact_jql}) AND created >= -{args.days}d ORDER BY created DESC"
+        )
+        exact_label_count = jira.count_jql_results(global_label_jql)
+        disclaimer = format_label_discovery_disclaimer(
+            category_ids,
+            exact_bug_count=exact_label_count,
+            days=args.days,
+        )
         print(disclaimer)
         print()
         logger.info(
-            "Label discovery categories: %s (%d substrings)",
+            "Label discovery categories: %s (%d substrings, %d exact matches in %dd)",
             ", ".join(category_ids),
             len(discovery_label_substrings),
+            exact_label_count,
+            args.days,
         )
 
     if args.domain_filter_only:

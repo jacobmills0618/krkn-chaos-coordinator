@@ -154,6 +154,9 @@ def format_label_category_display_name(
 def format_label_discovery_disclaimer(
     category_ids: list[str],
     config_dir: Path | None = None,
+    *,
+    exact_bug_count: int | None = None,
+    days: int | None = None,
 ) -> str:
     """Disclaimer printed when label discovery backfill is enabled."""
     names = [
@@ -161,11 +164,23 @@ def format_label_discovery_disclaimer(
         for cid in category_ids
     ]
     joined = ", ".join(names)
-    return (
-        f"DISCOVERY NOTE: JIRA bug search included label discovery using: {joined}. "
-        "Component-based search also ran for each agent. "
-        'For component-only discovery, select "No" for label discovery.'
+    lines = [
+        f"DISCOVERY NOTE: JIRA bug search included label discovery using: {joined}.",
+        "Component-based search also ran for each agent.",
+    ]
+    if exact_bug_count is not None and days is not None:
+        lines.append(
+            f"Global exact label matches ({days}d): {exact_bug_count} OCPBUGS bugs "
+            f"(authoritative JIRA total for configured label names)."
+        )
+        lines.append(
+            "Per-agent log lines show only bugs ADDED to that agent's pool "
+            "(+'N added') — do not sum those across agents."
+        )
+    lines.append(
+        'For component-only discovery, select "No" for label discovery in /krkn-chaos-scan.'
     )
+    return " ".join(lines)
 
 
 def list_label_discovery_ask_options(config_dir: Path | None = None) -> list[str]:

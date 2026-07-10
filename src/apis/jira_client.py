@@ -163,17 +163,10 @@ class JiraClient:
         )
         if discovery_label_substrings:
             exact_jql = build_exact_label_substrings_jql(discovery_label_substrings)
-            logger.info(
-                "Label discovery JQL (exact): %s",
-                exact_jql,
-            )
+            logger.info("Label discovery JQL (exact): %s", exact_jql)
             bugs = self._apply_jql_backfill(
                 bugs, exact_jql, days, max_results, backfill_name="label-exact",
             )
-            if len(bugs) < max_results:
-                bugs = self._backfill_bugs_by_label_substrings(
-                    bugs, discovery_label_substrings, days, max_results,
-                )
         return bugs[:max_results]
 
     def _apply_jql_backfill(
@@ -195,6 +188,7 @@ class JiraClient:
         seen_keys = {b.key for b in bugs}
         full_jql = f"({jql}) AND created >= -{days}d ORDER BY created DESC"
         extra = self._search(full_jql, remaining)
+        jira_returned = len(extra)
         backfill_count = 0
         for bug in extra:
             if bug.key in seen_keys:
@@ -205,12 +199,53 @@ class JiraClient:
             if len(bugs) >= max_results:
                 break
 
-        if backfill_count:
+        already_in_pool = jira_returned - backfill_count
+        if backfill_name.startswith("label"):
+            logger.info(
+                "Discovery %s backfill: JIRA returned %d, %d already in agent pool, "
+                "+%d added (agent pool now %d). "
+                "Do not sum '+N added' across agents — use global label count in run header.",
+                backfill_name,
+                jira_returned,
+                already_in_pool,
+                backfill_count,
+                len(bugs),
+            )
+        elif backfill_count:
             logger.info(
                 "Discovery %s backfill: %d total bugs (+%d new)",
                 backfill_name, len(bugs), backfill_count,
             )
         return bugs[:max_results]
+
+    def count_jql_results(self, jql: str, max_count: int = 10000) -> int:
+        """Count issues matching JQL (paginated, for global label census)."""
+        url = f"{self._config.url}/rest/api/3/search/jql"
+        total = 0
+        next_token = None
+        page_size = min(max_count, 100)
+
+        while total < max_count:
+            params = {"jql": jql, "maxResults": page_size, "fields": "key"}
+            if next_token:
+                params["nextPageToken"] = next_token
+            try:
+                response = self._session.get(url, params=params, timeout=30)
+                response.raise_for_status()
+            except requests.RequestException as e:
+                logger.error("JIRA count query failed: %s", e)
+                break
+
+            data = response.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+            total += len(issues)
+            if data.get("isLast", True) or not data.get("nextPageToken"):
+                break
+            next_token = data["nextPageToken"]
+
+        return total
 
     def _fetch_matching_labels(self, substrings: tuple[str, ...]) -> list[str]:
         """Fetch all Jira site labels and return those matching any substring."""
