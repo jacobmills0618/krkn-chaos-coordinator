@@ -12,8 +12,12 @@ from src.labels.registry import (
     LabelCategoryConfig,
     _load_label_category_config,
     discover_label_categories,
+    format_label_categories_bullet_list,
+    format_label_category_display_name,
     format_label_category_prompt_option,
+    format_label_discovery_disclaimer,
     list_label_category_prompt_options,
+    list_label_discovery_ask_options,
     parse_category_ids_from_prompt_options,
     resolve_label_substrings,
 )
@@ -157,3 +161,43 @@ class TestFormatLabelCategoryPromptOption:
         assert format_label_category_prompt_option(config) == (
             "Foo Bar — Example labels (foo_bar)"
         )
+
+
+class TestLabelDiscoveryDisclaimer:
+
+    def test_formats_disclaimer_with_category_id(self, tmp_path: Path) -> None:
+        _write_yaml(tmp_path, "openshift_virtualization", {
+            "name": "openshift_virtualization",
+            "description": "Virt labels",
+            "label_substrings": ["cnv"],
+        })
+        disclaimer = format_label_discovery_disclaimer(
+            ["openshift_virtualization"], config_dir=tmp_path,
+        )
+        assert "label discovery using:" in disclaimer
+        assert "openshift_virtualization" in disclaimer
+        assert 'select "No" for label discovery' in disclaimer
+
+
+class TestListLabelDiscoveryAskOptions:
+
+    def test_returns_no_and_input_like_agents(self) -> None:
+        options = list_label_discovery_ask_options()
+        assert options == [
+            "No — component search only (Recommended)",
+            "Input Label Category(s)",
+        ]
+
+    def test_format_label_categories_bullet_list(self, tmp_path: Path) -> None:
+        _write_yaml(tmp_path, "openshift_virtualization", {
+            "name": "openshift_virtualization",
+            "description": "Virt labels",
+            "label_substrings": ["cnv"],
+        })
+        (tmp_path / "scan_prompt.yaml").write_text(
+            "fixed_labels:\n"
+            "  openshift_virtualization: OpenShift Virt (openshift_virtualization)\n"
+        )
+        bullets = format_label_categories_bullet_list(config_dir=tmp_path)
+        assert bullets == "- openshift_virtualization — OpenShift Virt"
+

@@ -52,13 +52,19 @@ def format_approval_queue(gaps: list[GapAnalysis]) -> str:
     return "\n".join(lines)
 
 
-def format_summary(results: list[AgentResult]) -> str:
+def format_summary(
+    results: list[AgentResult],
+    discovery_note: str | None = None,
+) -> str:
     """Format a summary of all agent results."""
     lines = []
     lines.append("=" * 60)
     lines.append("krkn-chaos-coordinator — Run Summary")
     lines.append("=" * 60)
     lines.append("")
+    if discovery_note:
+        lines.append(discovery_note)
+        lines.append("")
 
     total_bugs = 0
     total_relevant = 0

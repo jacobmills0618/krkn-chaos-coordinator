@@ -147,8 +147,13 @@ def main():
     logger.info("Agent(s): %s", ", ".join(agent_names))
 
     discovery_label_substrings: tuple[str, ...] | None = None
+    disclaimer: str | None = None
     if args.discovery_label_categories:
-        from src.labels.registry import discover_label_categories, resolve_label_substrings
+        from src.labels.registry import (
+            discover_label_categories,
+            format_label_discovery_disclaimer,
+            resolve_label_substrings,
+        )
 
         category_ids = [
             c.strip() for c in args.discovery_label_categories.split(",") if c.strip()
@@ -163,6 +168,9 @@ def main():
             )
             return
         discovery_label_substrings = resolve_label_substrings(category_ids)
+        disclaimer = format_label_discovery_disclaimer(category_ids)
+        print(disclaimer)
+        print()
         logger.info(
             "Label discovery categories: %s (%d substrings)",
             ", ".join(category_ids),
@@ -238,7 +246,7 @@ def main():
     # Orchestrator: deduplicate and format
     gaps = deduplicate_gaps(all_results)
 
-    print(format_summary(all_results))
+    print(format_summary(all_results, discovery_note=disclaimer))
     print()
 
     ran_virt = "virtualization" in agent_names

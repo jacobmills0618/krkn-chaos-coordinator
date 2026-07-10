@@ -134,3 +134,59 @@ def resolve_label_substrings(
             raise ValueError(f"Unknown label category: {category_id}")
         merged.update(config.label_substrings)
     return tuple(sorted(merged))
+
+
+def format_label_category_display_name(
+    category_id: str,
+    config_dir: Path | None = None,
+) -> str:
+    """Human-readable category name for disclaimers and logs."""
+    categories = discover_label_categories(config_dir)
+    config = categories.get(category_id)
+    if not config:
+        return category_id
+    if config.prompt_label:
+        return config.prompt_label.rsplit("(", 1)[0].strip() or category_id
+    title = config.name.replace("_", " ").title()
+    return title
+
+
+def format_label_discovery_disclaimer(
+    category_ids: list[str],
+    config_dir: Path | None = None,
+) -> str:
+    """Disclaimer printed when label discovery backfill is enabled."""
+    names = [
+        f"{format_label_category_display_name(cid, config_dir)} ({cid})"
+        for cid in category_ids
+    ]
+    joined = ", ".join(names)
+    return (
+        f"DISCOVERY NOTE: JIRA bug search included label discovery using: {joined}. "
+        "Component-based search also ran for each agent. "
+        'For component-only discovery, select "No" for label discovery.'
+    )
+
+
+def list_label_discovery_ask_options(config_dir: Path | None = None) -> list[str]:
+    """AskUserQuestion options for label discovery (mirrors agent Input flow).
+
+    Two buttons only: skip label backfill, or prompt user to type category ID(s)
+    in chat. Category list belongs in the question text, not as button options.
+    """
+    del config_dir  # options are fixed; categories listed in question text
+    return [
+        "No — component search only (Recommended)",
+        "Input Label Category(s)",
+    ]
+
+
+def format_label_categories_bullet_list(config_dir: Path | None = None) -> str:
+    """Bullet list of category_id + label for AskUserQuestion question text."""
+    bullets: list[str] = []
+    for label in list_label_category_prompt_options(config_dir):
+        match = _CATEGORY_ID_SUFFIX.search(label.strip())
+        category_id = match.group(1) if match else label
+        short = label.rsplit("(", 1)[0].strip() or category_id
+        bullets.append(f"- {category_id} — {short}")
+    return "\n".join(bullets)

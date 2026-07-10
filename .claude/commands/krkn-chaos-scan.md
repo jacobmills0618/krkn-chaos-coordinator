@@ -74,7 +74,19 @@ Use fixed labels from `config/agents/scan_prompt.yaml` when present; otherwise u
 | upgrade_lifecycle | Upgrade lifecycle — CVO, MCO, installer (upgrade_lifecycle) |
 | virtualization | OpenShift Virtualization — VM, migration, KubeVirt (virtualization) |
 
-- Question: "Which domain agent(s) should run?\n\nAvailable agents:\n- control_plane — Control plane (etcd, API server, scheduler)\n- networking — OVN, DNS, ingress\n- … (one bullet per discovered agent, with agent_id)\n\nUse agent_id values when specifying agents."
+- Question text (pass as one string with line breaks):
+
+```
+Which domain agent(s) should run?
+
+Available agents:
+- control_plane — Control plane (etcd, API server, scheduler)
+- networking — OVN, DNS, ingress
+- … (one bullet per discovered agent, with agent_id)
+
+Use agent_id values when specifying agents.
+```
+
 - Options (only 2 — stays within API limit):
   - "All agents (Recommended)"
   - "Input Agent(s)"
@@ -105,9 +117,13 @@ Map selections to CLI flags (use the days value from Question 3):
 
 **Batch 2 — Label discovery (after agent selection in Batch 1):**
 
-Ask whether to backfill JIRA discovery with label-category searches. This applies to **all selected agents** (component search always runs first).
+Label discovery backfills JIRA results for **every selected agent** (component search always runs first). It is **independent of which agents were chosen.**
 
-**Step 1 — Discover label categories:**
+Works **exactly like Question 2 "Input Agent(s)"**: categories are listed in the question text; the user types `category_id` value(s) in chat.
+
+**Never skip label discovery** once the user has selected **Input Label Category(s)** and provided category ID(s) — always pass `--discovery-label-categories` with those IDs.
+
+**Step 1 — Discover label categories (required before AskUserQuestion):**
 
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
@@ -117,27 +133,39 @@ for name, cfg in sorted(discover_label_categories().items()):
 "
 ```
 
-**Step 2 — Canonical fixed options** (edit labels in `config/labels/scan_prompt.yaml`; `category_id` must match YAML `name`):
+**Step 2 — AskUserQuestion (single select, 2 options only):**
 
-| category_id | Fixed option label |
-|-------------|-------------------|
-| openshift_virtualization | OpenShift Virtualization — CNV, KubeVirt, VM labels (openshift_virtualization) |
+- Question text (pass as one string with line breaks):
 
-**Step 3 — Merge into AskUserQuestion options** (same rules as agents: fixed label wins when `category_id` is discovered; sort by `category_id` from trailing `(category_id)`).
+```
+Enable JIRA label discovery? Applies to ALL selected agents.
 
-**Question 5a — Enable label discovery?** (AskUserQuestion, single select)
-- Question: "Would you like to filter by Labels?"
-- Options:
+Available label categories:
+- openshift_virtualization — OpenShift Virtualization — CNV, KubeVirt, VM labels
+(one bullet per discovered category: `{category_id} — {description}` from Step 1)
+
+Use category_id values when specifying categories.
+```
+
+- Options (only 2 — same pattern as agents):
   - "No — component search only (Recommended)"
-  - "Yes — add label category backfill"
+  - "Input Label Category(s)"
 
-**Question 5b — Label categories** (only if user chose Yes; AskUserQuestion, multiSelect)
-- Question: "Which label categories should be searched? (applies to all selected agents)"
-- multiSelect: true
-- Options: merged category list from Step 3 (no "All" option — pick one or more categories)
-- Map selection → CLI: extract `(category_id)` suffix → `--discovery-label-categories openshift_virtualization` or comma-separated for multiple
+Map selection → CLI:
+- **"No — component search only (Recommended)"** → omit `--discovery-label-categories`
+- **"Input Label Category(s)"** → after the user submits, ask in **chat**: "Enter label category ID(s), comma-separated (e.g. `openshift_virtualization`):". Validate IDs against Step 1 discovery output; then `--discovery-label-categories <comma-separated ids>`
 
-If user chose **No** in 5a, omit `--discovery-label-categories`.
+**Example (one category today):** user types `openshift_virtualization` → `--discovery-label-categories openshift_virtualization`
+
+**Step 3 — After the pipeline runs**, repeat the disclaimer from `main.py` output in your summary when label discovery was enabled:
+
+```
+DISCOVERY NOTE: JIRA bug search included label discovery using: OpenShift Virtualization — CNV, KubeVirt, VM labels (openshift_virtualization). 
+Component-based search also ran for each agent. 
+For component-only discovery, select "No" for label discovery in /krkn-chaos-scan.
+```
+
+If the user chose **No**, do not pass `--discovery-label-categories` and do not print the label disclaimer.
 
 Add new categories by dropping a YAML in `config/labels/` (see `config/labels/openshift_virtualization.yaml`).
 
