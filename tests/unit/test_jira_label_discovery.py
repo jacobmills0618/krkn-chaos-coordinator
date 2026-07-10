@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from src.apis.jira_client import build_label_discovery_jql, filter_labels_by_substrings
+from src.apis.jira_client import (
+    build_exact_label_substrings_jql,
+    build_label_discovery_jql,
+    filter_labels_by_substrings,
+    issue_labels_match_substrings,
+)
 
 
 class TestFilterLabelsBySubstrings:
@@ -41,6 +46,28 @@ class TestFilterLabelsBySubstrings:
 
     def test_returns_empty_for_empty_substrings(self) -> None:
         assert filter_labels_by_substrings(["cnv"], ()) == []
+
+
+class TestIssueLabelsMatchSubstrings:
+
+    def test_matches_when_label_contains_substring(self) -> None:
+        assert issue_labels_match_substrings(
+            ["openshift-virtualization-4.21", "ci"],
+            ("kubevirt", "openshift-virtualization"),
+        )
+
+    def test_no_match(self) -> None:
+        assert not issue_labels_match_substrings(["networking"], ("kubevirt",))
+
+
+class TestBuildExactLabelSubstringsJql:
+
+    def test_builds_or_clause_for_configured_substrings(self) -> None:
+        jql = build_exact_label_substrings_jql(("cnv", "kubevirt", "ocp-virt"))
+        assert jql == (
+            'project = OCPBUGS AND (labels = "cnv" OR labels = "kubevirt" '
+            'OR labels = "ocp-virt")'
+        )
 
 
 class TestBuildLabelDiscoveryJql:

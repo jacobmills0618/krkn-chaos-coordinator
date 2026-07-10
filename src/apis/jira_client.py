@@ -29,6 +29,23 @@ def filter_labels_by_substrings(
     )
 
 
+def issue_labels_match_substrings(
+    labels: list[str],
+    substrings: tuple[str, ...] | list[str],
+) -> bool:
+    """True if any issue label contains any configured substring (case-insensitive)."""
+    if not labels or not substrings:
+        return False
+    subs = [s.lower() for s in substrings]
+    return any(any(sub in label.lower() for sub in subs) for label in labels)
+
+
+def build_exact_label_substrings_jql(substrings: tuple[str, ...] | list[str]) -> str:
+    """JQL for exact label names (same style as JIRA AI / labels in (...))."""
+    terms = " OR ".join(f'labels = "{s}"' for s in substrings)
+    return f"project = OCPBUGS AND ({terms})"
+
+
 def build_label_discovery_jql(
     labels: list[str],
     batch_size: int = _LABEL_JQL_BATCH_SIZE,
@@ -145,18 +162,18 @@ class JiraClient:
             bugs, discovery_jql, days, max_results, backfill_name="JQL text",
         )
         if discovery_label_substrings:
-            matching_labels = self._fetch_matching_labels(discovery_label_substrings)
+            exact_jql = build_exact_label_substrings_jql(discovery_label_substrings)
             logger.info(
-                "Label discovery: %d site labels match substrings %s",
-                len(matching_labels),
-                list(discovery_label_substrings),
+                "Label discovery JQL (exact): %s",
+                exact_jql,
             )
-            for label_jql in build_label_discovery_jql(matching_labels):
-                bugs = self._apply_jql_backfill(
-                    bugs, label_jql, days, max_results, backfill_name="label",
+            bugs = self._apply_jql_backfill(
+                bugs, exact_jql, days, max_results, backfill_name="label-exact",
+            )
+            if len(bugs) < max_results:
+                bugs = self._backfill_bugs_by_label_substrings(
+                    bugs, discovery_label_substrings, days, max_results,
                 )
-                if len(bugs) >= max_results:
-                    break
         return bugs[:max_results]
 
     def _apply_jql_backfill(
@@ -229,6 +246,100 @@ class JiraClient:
                 break
 
         return filter_labels_by_substrings(all_labels, substrings)
+
+    def _backfill_bugs_by_label_substrings(
+        self,
+        bugs: list[Bug],
+        substrings: tuple[str, ...],
+        days: int,
+        max_results: int,
+    ) -> list[Bug]:
+        """Fallback when /rest/api/3/label is blocked: scan issues that have labels set."""
+        remaining = max_results - len(bugs)
+        if remaining <= 0:
+            return bugs[:max_results]
+
+        logger.warning(
+            "Label API unavailable or returned no matches; scanning OCPBUGS issues "
+            "with labels for substrings %s",
+            list(substrings),
+        )
+        seen_keys = {b.key for b in bugs}
+        jql = (
+            "project = OCPBUGS AND labels IS NOT EMPTY "
+            f"AND created >= -{days}d ORDER BY created DESC"
+        )
+        url = f"{self._config.url}/rest/api/3/search/jql"
+        page_size = min(remaining * 3, 100)
+        next_token = None
+        backfill_count = 0
+
+        while len(bugs) < max_results:
+            params = {
+                "jql": jql,
+                "maxResults": page_size,
+                "fields": "summary,description,status,priority,components,created,labels",
+            }
+            if next_token:
+                params["nextPageToken"] = next_token
+
+            try:
+                response = self._session.get(url, params=params, timeout=30)
+                response.raise_for_status()
+            except requests.RequestException as e:
+                logger.error("JIRA label issue-scan failed: %s", e)
+                break
+
+            data = response.json()
+            issues = data.get("issues", [])
+            if not issues:
+                break
+
+            for issue in issues:
+                fields = issue["fields"]
+                labels = fields.get("labels") or []
+                if not issue_labels_match_substrings(labels, substrings):
+                    continue
+                key = issue["key"]
+                if key in seen_keys:
+                    continue
+
+                components = fields.get("components", [])
+                component_names = (
+                    tuple(c["name"] for c in components) if components else ("Unknown",)
+                )
+                description = fields.get("description", "") or ""
+                if isinstance(description, dict):
+                    description = _extract_text_from_adf(description)
+
+                bugs.append(
+                    Bug(
+                        key=key,
+                        summary=fields.get("summary", ""),
+                        description=description,
+                        component=", ".join(component_names),
+                        priority=fields.get("priority", {}).get("name", "Unknown"),
+                        status=fields.get("status", {}).get("name", "Unknown"),
+                        created=fields.get("created", ""),
+                        url=f"{self._config.url}/browse/{key}",
+                        all_components=component_names,
+                    )
+                )
+                seen_keys.add(key)
+                backfill_count += 1
+                if len(bugs) >= max_results:
+                    break
+
+            next_token = data.get("nextPageToken")
+            if data.get("isLast", True) or not next_token or len(bugs) >= max_results:
+                break
+
+        if backfill_count:
+            logger.info(
+                "Discovery label issue-scan backfill: %d total bugs (+%d new)",
+                len(bugs), backfill_count,
+            )
+        return bugs[:max_results]
 
     def _four_tier_version_query(
         self,

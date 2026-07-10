@@ -3,6 +3,7 @@ description: "JIRA labels matching CNV, KubeVirt, and VM-related tags"
 label_substrings:
   - cnv
   - kubevirt
+  - ocp-virt
   - openshift-virtualization
   - virtualmachine
   - virtual_machine
