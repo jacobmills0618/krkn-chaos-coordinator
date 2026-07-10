@@ -1,0 +1,8 @@
+# Fixed AskUserQuestion labels for label-category discovery (after agent selection).
+# Categories listed here use these labels; others get a dynamic label from
+# format_label_category_prompt_option() (description or prompt_label in YAML).
+#
+# Each label must end with (category_id) matching the category YAML `name` field.
+
+fixed_labels:
+  openshift_virtualization: "OpenShift Virtualization — CNV, KubeVirt, VM labels (openshift_virtualization)"

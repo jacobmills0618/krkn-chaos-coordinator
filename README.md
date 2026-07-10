@@ -10,6 +10,7 @@
 
 [![Pluggable Agents](https://img.shields.io/badge/agents-pluggable-blue?style=for-the-badge)](config/agents/README.md)
 [![Configurable Filters](https://img.shields.io/badge/filters-configurable-green?style=for-the-badge)](config/filters/README.md)
+[![Label Discovery](https://img.shields.io/badge/labels-pluggable-purple?style=for-the-badge)](config/labels/README.md)
 ![Tests](https://img.shields.io/badge/tests-200%20passing-brightgreen?style=for-the-badge)
 ![Python](https://img.shields.io/badge/python-3.11%2B-yellow?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-Apache--2.0-lightgrey?style=for-the-badge)
@@ -26,7 +27,7 @@ DISCOVER → FILTER → MAP → ANALYZE → ACT → REMEMBER
 
 | Phase | What it does |
 |:------|:------------|
-| **DISCOVER** | Query JIRA bugs (4-tier version matching) + z-stream changelogs |
+| **DISCOVER** | Query JIRA bugs by component (+ optional label/text backfill) + z-stream changelogs |
 | **FILTER** | 3-tier: keyword pre-filter → semantic cache → LLM classification |
 | **MAP** | ChromaDB RAG + LLM reasoning over existing krkn scenarios |
 | **ANALYZE** | Score confidence (0-100), generate specific krkn modifications |
@@ -47,6 +48,41 @@ Orchestrator (dedup, approval queue)
 ```
 
 6 built-in, fully pluggable agents covering all major OpenShift component areas. Need a new domain-specific expert agent? [Add a YAML →](config/agents/README.md)
+
+### Label discovery (optional backfill)
+
+Each agent discovers bugs primarily by **JIRA Component** (`components:` in agent YAML). Related tickets are often filed under the wrong component but carry domain **labels** — use **label categories** to backfill discovery across **every selected agent**.
+
+```bash
+# Component search + virt label backfill on all agents
+python src/main.py --release 4.21 --discovery-label-categories openshift_virtualization
+
+# Same backfill when running specific agents
+python src/main.py --release 4.21 --agent control_plane,networking \
+  --discovery-label-categories openshift_virtualization
+```
+
+In `/krkn-chaos-scan`, after you pick agents (or "All agents"), the wizard asks **"Would you like to filter by Labels?"** and lists categories from `config/labels/`.
+
+**Add a category** — drop a YAML in `config/labels/` (no code changes). Set wizard labels in `config/labels/scan_prompt.yaml` under `fixed_labels` (same pattern as `config/agents/scan_prompt.yaml`):
+
+```yaml
+# config/labels/my_domain.yaml
+name: my_domain
+description: "Bugs tagged with my-domain labels"
+label_substrings:
+  - "my-substring"
+  - "another-tag"
+```
+
+```yaml
+# config/labels/scan_prompt.yaml — fixed_labels for /krkn-chaos-scan
+fixed_labels:
+  openshift_virtualization: "OpenShift Virtualization — CNV, KubeVirt, VM labels (openshift_virtualization)"
+  my_domain: "My Domain — custom wizard label (my_domain)"
+```
+
+Guide: [Label categories](config/labels/README.md)
 
 ---
 
@@ -71,7 +107,7 @@ PYTHONPATH=. python -m src.knowledge.ingest ./chroma_data    # one-time, ~6 min
 #### Claude Code (recommended)
 ```bash
 claude
-/krkn-chaos-scan           # interactive — version, agents, lookback, scan type
+/krkn-chaos-scan           # interactive — version, agents, labels, lookback, scan type
 ```
 
 #### CLI
@@ -80,6 +116,7 @@ python src/main.py --release 4.21 --use-llm                         # all agents
 python src/main.py --release 4.21 --agent control_plane --use-llm   # single
 python src/main.py --release 4.20,4.21 --agent networking,storage   # multi
 python src/main.py --release 4.21                                    # keyword only (no LLM)
+python src/main.py --release 4.21 --discovery-label-categories openshift_virtualization  # label backfill
 ```
 
 #### Status output
@@ -117,7 +154,7 @@ docs:                                # domain docs for ChromaDB (github / local 
 python src/main.py --release 4.21 --agent virtualization --use-llm
 ```
 
-Guides: [Agent config](config/agents/README.md) · [Filter keywords](config/filters/README.md)
+Guides: [Agent config](config/agents/README.md) · [Filter keywords](config/filters/README.md) · [Label categories](config/labels/README.md)
 
 ---
 
@@ -189,12 +226,19 @@ Per-phase routing: `LLM_FILTER_MODEL=claude-sonnet-4-6` · `LLM_ANALYZE_MODEL=cl
 config/
 ├── agents/                    # Drop a YAML to add a new agent
 │   ├── control_plane.yaml
+│   ├── scan_prompt.yaml       # fixed_labels for /krkn-chaos-scan agent picker
 │   └── ...
+├── labels/                    # Drop a YAML to add a label discovery category
+│   ├── openshift_virtualization.yaml
+│   ├── scan_prompt.yaml       # fixed_labels for label category picker
+│   └── README.md
 └── filters/
     └── common.yaml            # Shared filter keywords
 
 src/
 ├── main.py                    # CLI entry point
+├── labels/
+│   └── registry.py            # Auto-discovers label categories from YAML
 ├── status.py                  # Pipeline status line
 ├── models.py                  # Domain models
 ├── reasoning.py               # LLM reasoning (MAP + ANALYZE)

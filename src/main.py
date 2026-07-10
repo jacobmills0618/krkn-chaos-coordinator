@@ -87,6 +87,15 @@ def main():
         default=False,
         help="Skip interactive filter review prompt after virtualization scans",
     )
+    parser.add_argument(
+        "--discovery-label-categories",
+        default=None,
+        metavar="IDS",
+        help=(
+            "Comma-separated label category IDs for JIRA label backfill on all agents "
+            "(e.g. openshift_virtualization). See config/labels/"
+        ),
+    )
     args = parser.parse_args()
 
     if args.domain_filter_only and args.use_llm:
@@ -137,6 +146,29 @@ def main():
 
     logger.info("Agent(s): %s", ", ".join(agent_names))
 
+    discovery_label_substrings: tuple[str, ...] | None = None
+    if args.discovery_label_categories:
+        from src.labels.registry import discover_label_categories, resolve_label_substrings
+
+        category_ids = [
+            c.strip() for c in args.discovery_label_categories.split(",") if c.strip()
+        ]
+        registered_categories = discover_label_categories()
+        unknown = [c for c in category_ids if c not in registered_categories]
+        if unknown:
+            available = ", ".join(sorted(registered_categories.keys()))
+            print(
+                f"Unknown label category(ies): {', '.join(unknown)}. "
+                f"Available: {available}"
+            )
+            return
+        discovery_label_substrings = resolve_label_substrings(category_ids)
+        logger.info(
+            "Label discovery categories: %s (%d substrings)",
+            ", ".join(category_ids),
+            len(discovery_label_substrings),
+        )
+
     if args.domain_filter_only:
         non_virt = [a for a in agent_names if a != "virtualization"]
         if non_virt:
@@ -175,6 +207,7 @@ def main():
             "domain_filter_only": args.domain_filter_only,
             "max_bugs": args.max_bugs,
             "days": args.days,
+            "discovery_label_substrings": discovery_label_substrings,
         }
         agent = BaseDomainAgent(agent_name=agent_name, **agent_kwargs)
         return agent.run()

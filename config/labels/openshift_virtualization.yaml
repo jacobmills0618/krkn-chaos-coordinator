@@ -1,0 +1,9 @@
+name: openshift_virtualization
+description: "JIRA labels matching CNV, KubeVirt, and VM-related tags"
+label_substrings:
+  - cnv
+  - kubevirt
+  - openshift-virtualization
+  - virtualmachine
+  - virtual_machine
+  - virtual-machine

@@ -103,11 +103,49 @@ Map selections to CLI flags (use the days value from Question 3):
 - "Quick scan" → `--max-bugs 50 --use-llm`
 - "Keyword only" → `--max-bugs 2000` (no --use-llm)
 
-**Batch 2 — Filter stages (only when virtualization is the sole selected agent):**
+**Batch 2 — Label discovery (after agent selection in Batch 1):**
+
+Ask whether to backfill JIRA discovery with label-category searches. This applies to **all selected agents** (component search always runs first).
+
+**Step 1 — Discover label categories:**
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 -c "
+from src.labels.registry import discover_label_categories, format_label_category_prompt_option
+for name, cfg in sorted(discover_label_categories().items()):
+    print(f'{name}\t{format_label_category_prompt_option(cfg)}')
+"
+```
+
+**Step 2 — Canonical fixed options** (edit labels in `config/labels/scan_prompt.yaml`; `category_id` must match YAML `name`):
+
+| category_id | Fixed option label |
+|-------------|-------------------|
+| openshift_virtualization | OpenShift Virtualization — CNV, KubeVirt, VM labels (openshift_virtualization) |
+
+**Step 3 — Merge into AskUserQuestion options** (same rules as agents: fixed label wins when `category_id` is discovered; sort by `category_id` from trailing `(category_id)`).
+
+**Question 5a — Enable label discovery?** (AskUserQuestion, single select)
+- Question: "Would you like to filter by Labels?"
+- Options:
+  - "No — component search only (Recommended)"
+  - "Yes — add label category backfill"
+
+**Question 5b — Label categories** (only if user chose Yes; AskUserQuestion, multiSelect)
+- Question: "Which label categories should be searched? (applies to all selected agents)"
+- multiSelect: true
+- Options: merged category list from Step 3 (no "All" option — pick one or more categories)
+- Map selection → CLI: extract `(category_id)` suffix → `--discovery-label-categories openshift_virtualization` or comma-separated for multiple
+
+If user chose **No** in 5a, omit `--discovery-label-categories`.
+
+Add new categories by dropping a YAML in `config/labels/` (see `config/labels/openshift_virtualization.yaml`).
+
+**Batch 3 — Filter stages (only when virtualization is the sole selected agent):**
 
 If the user selected **only** `virtualization` (not "All agents", not multiple agents), ask a **second** AskUserQuestion with multiSelect:
 
-**Question 5 — Filter stages:**
+**Question 6 — Filter stages:**
 - Question: "Select which filter layers should be applied? (virtualization agent)"
 - multiSelect: true
 - allow_multiple: true
@@ -127,8 +165,8 @@ Map checkbox combinations to CLI flags:
 
 **Important constraints:**
 - `--domain-filter-only` requires `--agent virtualization` alone (no `--use-llm`).
-- If user selected "All agents" or multiple agents including virtualization, **skip Question 5** and use the default full chaos filter for every agent.
-- For non-virtualization agents, only the Krkn Chaos filter applies (Question 5 is not shown).
+- If user selected "All agents" or multiple agents including virtualization, **skip Question 6** and use the default full chaos filter for every agent.
+- For non-virtualization agents, only the Krkn Chaos filter applies (Question 6 is not shown).
 
 **Virt domain-only filter tuning:**
 
@@ -138,21 +176,23 @@ When the user selects **OpenShift Virtualization only** (no Krkn Chaos), run the
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 src/main.py \
   --release <VERSION> --agent virtualization \
   --max-bugs <MAX> --days <DAYS> --domain-filter-only \
+  --discovery-label-categories <CATEGORY_IDS_OR_OMIT> \
   --filter-review-json filter_review.json --no-filter-review
 ```
 
-**Important:** When running via this slash command (agent Bash), always pass **`--no-filter-review`**. The terminal `input()` menu in `main.py` does not work in non-interactive Bash — filter review happens in **Batch 3 (AskUserQuestion)** below, not inside `main.py`.
+**Important:** When running via this slash command (agent Bash), always pass **`--no-filter-review`**. The terminal `input()` menu in `main.py` does not work in non-interactive Bash — filter review happens in **Batch 4 (AskUserQuestion)** below, not inside `main.py`.
 
-For full keyword filter (domain + chaos), omit `--domain-filter-only` but still use `--filter-review-json` + `--no-filter-review` when reviewing via Batch 3.
+For full keyword filter (domain + chaos), omit `--domain-filter-only` but still use `--filter-review-json` + `--no-filter-review` when reviewing via Batch 4.
 
 ## Running the Pipeline
 
 After getting answers, run the pipeline using `main.py`:
 
 ```bash
-cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 src/main.py \
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && PYTHONPATH=. python3 src/main.py \
   --release <VERSION_OR_COMMA_LIST> \
   --agent <AGENT_OR_COMMA_LIST_OR_all> \
+  --discovery-label-categories <CATEGORY_IDS_OR_OMIT> \
   --use-llm \
   --max-bugs <MAX_BUGS> \
   --days <DAYS> \
@@ -185,13 +225,14 @@ Map the user's interactive selections:
 - "14 days" → `--days 14`
 - "All agents" → omit `--agent` flag
 - Specific agent(s) → extract `agent_id` from `(agent_id)` suffix in Question 2 labels → `--agent control_plane,networking`
+- Label categories enabled → `--discovery-label-categories openshift_virtualization` (comma-separated if multiple)
 - "virtualization" only + OCP Virt checkbox only → `--agent virtualization --domain-filter-only`
 
 ## After Filter: Review virt PASS / SKIP (virtualization scans)
 
 **Do this only after** `main.py` finishes and `--filter-review-json` wrote the file.
 
-**Batch 3 — AskUserQuestion (required before printing any bug lists):**
+**Batch 4 — AskUserQuestion (required before printing any bug lists):**
 
 - Question: "Review filter results?"
 - Options (pick one):
@@ -200,7 +241,7 @@ Map the user's interactive selections:
   - "Show both PASS and SKIP"
   - "Skip review"
 
-**Do not** dump PASS/SKIP lists or write summary code until the user answers Batch 3.
+**Do not** dump PASS/SKIP lists or write summary code until the user answers Batch 4.
 
 After the user selects an option, load the JSON and print **only what they chose**:
 
@@ -228,7 +269,7 @@ print(format_filter_skip_list(skipped))
 
 Present each bug as: `[CONFIDENCE%] OCPBUGS-XXXXX: summary`. Tune keywords in `config/filters/ocp-virt.yaml`.
 
-**Running `main.py` directly in your own terminal (not agent Bash)?** Omit `--no-filter-review` to get the numbered menu via `input()` instead of Batch 3.
+**Running `main.py` directly in your own terminal (not agent Bash)?** Omit `--no-filter-review` to get the numbered menu via `input()` instead of Batch 4.
 
 ## After the Scan: Post Gaps to GitHub
 

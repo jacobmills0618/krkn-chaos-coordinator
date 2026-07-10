@@ -11,6 +11,38 @@ from src.models import Bug
 
 logger = logging.getLogger(__name__)
 
+# Jira labels are exact-match in JQL; batch to stay within query size limits.
+_LABEL_JQL_BATCH_SIZE = 100
+
+
+def filter_labels_by_substrings(
+    labels: list[str],
+    substrings: tuple[str, ...] | list[str],
+) -> list[str]:
+    """Return labels whose text contains any of the given substrings (case-insensitive)."""
+    if not substrings:
+        return []
+    subs = [s.lower() for s in substrings]
+    return sorted(
+        label for label in labels
+        if any(sub in label.lower() for sub in subs)
+    )
+
+
+def build_label_discovery_jql(
+    labels: list[str],
+    batch_size: int = _LABEL_JQL_BATCH_SIZE,
+) -> list[str]:
+    """Build one JQL query per batch of matching labels."""
+    if not labels:
+        return []
+    clauses: list[str] = []
+    for i in range(0, len(labels), batch_size):
+        batch = labels[i : i + batch_size]
+        quoted = ", ".join(f'"{label}"' for label in batch)
+        clauses.append(f"project = OCPBUGS AND labels in ({quoted})")
+    return clauses
+
 
 def _next_version(release: str) -> str:
     """Return the next minor version string. '4.21' → '4.22', '5.0' → '5.1'."""
@@ -103,12 +135,40 @@ class JiraClient:
         max_results: int = 2000,
         release: str | None = None,
         discovery_jql: str | None = None,
+        discovery_label_substrings: tuple[str, ...] | None = None,
     ) -> list[Bug]:
-        """Fetch bugs by component, optionally backfilling with a JQL text search."""
+        """Fetch bugs by component, optionally backfilling with JQL and label searches."""
         bugs = self.get_bugs_by_components(
             components, days=days, max_results=max_results, release=release,
         )
-        if not discovery_jql:
+        bugs = self._apply_jql_backfill(
+            bugs, discovery_jql, days, max_results, backfill_name="JQL text",
+        )
+        if discovery_label_substrings:
+            matching_labels = self._fetch_matching_labels(discovery_label_substrings)
+            logger.info(
+                "Label discovery: %d site labels match substrings %s",
+                len(matching_labels),
+                list(discovery_label_substrings),
+            )
+            for label_jql in build_label_discovery_jql(matching_labels):
+                bugs = self._apply_jql_backfill(
+                    bugs, label_jql, days, max_results, backfill_name="label",
+                )
+                if len(bugs) >= max_results:
+                    break
+        return bugs[:max_results]
+
+    def _apply_jql_backfill(
+        self,
+        bugs: list[Bug],
+        jql: str | None,
+        days: int,
+        max_results: int,
+        backfill_name: str,
+    ) -> list[Bug]:
+        """Append bugs from a JQL backfill query, deduplicating by issue key."""
+        if not jql:
             return bugs
 
         remaining = max_results - len(bugs)
@@ -116,8 +176,8 @@ class JiraClient:
             return bugs[:max_results]
 
         seen_keys = {b.key for b in bugs}
-        jql = f"({discovery_jql}) AND created >= -{days}d ORDER BY created DESC"
-        extra = self._search(jql, max_results)
+        full_jql = f"({jql}) AND created >= -{days}d ORDER BY created DESC"
+        extra = self._search(full_jql, remaining)
         backfill_count = 0
         for bug in extra:
             if bug.key in seen_keys:
@@ -128,11 +188,47 @@ class JiraClient:
             if len(bugs) >= max_results:
                 break
 
-        logger.info(
-            "Discovery backfill: %d total bugs (%d from JQL backfill)",
-            len(bugs), backfill_count,
-        )
+        if backfill_count:
+            logger.info(
+                "Discovery %s backfill: %d total bugs (+%d new)",
+                backfill_name, len(bugs), backfill_count,
+            )
         return bugs[:max_results]
+
+    def _fetch_matching_labels(self, substrings: tuple[str, ...]) -> list[str]:
+        """Fetch all Jira site labels and return those matching any substring."""
+        url = f"{self._config.url}/rest/api/3/label"
+        all_labels: list[str] = []
+        start_at = 0
+        page_size = 1000
+
+        while True:
+            try:
+                response = self._session.get(
+                    url,
+                    params={"startAt": start_at, "maxResults": page_size},
+                    timeout=30,
+                )
+                response.raise_for_status()
+            except requests.RequestException as e:
+                logger.error("JIRA label fetch failed: %s", e)
+                break
+
+            data = response.json()
+            values = data.get("values", [])
+            if not values:
+                break
+
+            all_labels.extend(values)
+            if data.get("isLast", True):
+                break
+
+            start_at += len(values)
+            total = data.get("total")
+            if total is not None and start_at >= total:
+                break
+
+        return filter_labels_by_substrings(all_labels, substrings)
 
     def _four_tier_version_query(
         self,

@@ -55,6 +55,7 @@ class BaseDomainAgent(ABC):
         domain_filter_only: bool = False,
         max_bugs: int = 2000,
         days: int = 14,
+        discovery_label_substrings: tuple[str, ...] | None = None,
     ):
         self.agent_name = agent_name
         self.jira = jira
@@ -71,6 +72,7 @@ class BaseDomainAgent(ABC):
         self.components = get_components_for_agent(agent_name)
         agent_config = discover_agents().get(agent_name)
         self._discovery_jql = agent_config.discovery_jql if agent_config else None
+        self._discovery_label_substrings = discovery_label_substrings
         self._slog = StructuredLogger(f"coordinator.{agent_name}")
 
         try:
@@ -170,6 +172,7 @@ class BaseDomainAgent(ABC):
             max_results=self.max_bugs,
             release=self.release,
             discovery_jql=self._discovery_jql,
+            discovery_label_substrings=self._discovery_label_substrings,
         )
 
     def _enrich_with_changelog(self, bugs: list[Bug]) -> list[Bug]:
