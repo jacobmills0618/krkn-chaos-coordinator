@@ -51,7 +51,7 @@ Orchestrator (dedup, approval queue)
 
 ### Label discovery (optional backfill)
 
-Each agent discovers bugs primarily by **JIRA Component** (`components:` in agent YAML). Related tickets are often filed under the wrong component but carry domain **labels** — use **label categories** to backfill discovery across **every selected agent**.
+Each agent discovers bugs primarily by **JIRA Component** (`components:` in agent YAML). Related tickets are often filed under various components yet carry domain **labels** — use **label categories** to backfill discovery across **every selected agent**.
 
 ```bash
 # Component search + virt label backfill on all agents
