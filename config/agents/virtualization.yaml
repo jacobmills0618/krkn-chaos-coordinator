@@ -1,0 +1,11 @@
+name: virtualization
+description: "OpenShift Virtualization / CNV / KubeVirt"
+components:
+  - "Virtualization"
+  - "Documentation / Virtualization"
+  - "HyperShift / OCP Virtualization"
+  - "Cloud Compute / KubeVirt Provider"
+  - "Console Kubevirt Plugin"
+  - "Installer / OpenShift on KubeVirt"
+  - "ocp-mcp-server / kubevirt"
+  - "LP--CNV"

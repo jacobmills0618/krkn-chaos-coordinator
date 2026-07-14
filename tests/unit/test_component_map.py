@@ -21,10 +21,17 @@ class TestComponentMap:
 
     def test_get_all_agents(self):
         agents = get_all_agents()
-        assert "control_plane" in agents
-        assert "networking" in agents
-        assert "upgrade_lifecycle" in agents
-        assert len(agents) == 6
+        assert agents == sorted(agents)
+        for name in (
+            "control_plane",
+            "networking",
+            "node_machine",
+            "operators_platform",
+            "storage",
+            "upgrade_lifecycle",
+            "virtualization",
+        ):
+            assert name in agents
 
     def test_components_are_copies(self):
         c1 = get_components_for_agent("control_plane")

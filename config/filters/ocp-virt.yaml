@@ -1,0 +1,96 @@
+# OpenShift Virtualization filter keywords — shared for OCP Virt agent coverage.
+# Agent-specific keywords go in each agent's YAML (config/agents/<name>.yaml).
+
+skip_keywords:
+  - "CVE-"
+  - "security tracking"
+  - "vulnerability"
+  - "flaky test"
+  - "test infrastructure"
+  - "ci failure"
+  - "test fix"
+  - "documentation"
+  - "typo"
+  - "backport"
+  - "cherry-pick"
+  - "cherry pick"
+  - "bump to"
+  - "bump "
+  - "rebase"
+  - "vendor update"
+  - "dependency update"
+  - "[stub]"
+  - "e2e test"
+  - "skopeo"
+  - "below the sea ui"
+  - "dpll pin"
+  - "component readiness"
+  - "ci job"
+  - "permafailing"
+  - "@patternfly"
+  - "add approver"
+
+ocp-virt_keywords:
+  # Product / platform identity
+  - "openshift virtualization"
+  - "openshift virtualisation"
+  - "ocp-virt"
+  - "ocp virt"
+  - "container native virtualization"
+  - "container native virtualisation"
+  - "cnv-"
+  - "kubevirt"
+  - "openshift-cnv"
+  - "openshift-cnv-cdi"
+  - "openshift-mtv"
+
+  # HyperConverged Cluster Operator (HCO)
+  - "hco-operator"
+  - "hyperconverged cluster operator"
+  - "hc-webhook"
+  - "hyperconverged-cluster-cli-download"
+  - "kubevirt-kubevirt-hyperconverged"
+  - "ssp-kubevirt-hyperconverged"
+  - "cdi-kubevirt-hyperconverged"
+  - "networkaddonsconfig/cluster"
+  - "networkaddonsconfig"
+
+  # Virtualization Core
+  - "virt-operator"
+  - "virt-api"
+  - "virt-controller"
+  - "virt-handler"
+  - "virt-launcher"
+  - "virt-export"
+  - "virtio"
+
+  # Storage / Disks
+  - "containerized data importer"
+  - "cdi-operator"
+  - "cdi-controller"
+  - "cdi-apiserver"
+  - "cdi-uploadproxy"
+  - "cdi-importer"
+  - "cdi-cloner"
+  - "cdi-upload"
+  - "cdiconfig"
+
+  # MTV (Migration Toolkit for Virtualization) + VM live migration CRDs
+  - "MTV"
+  - "migration toolkit for virtualization"
+  - "migrationplan"
+  - "forklift-controller"
+  - "virt-v2v"
+  - "vddk"
+
+  # Scaling
+  - "ssp-operator"
+  - "virt-template-validator"
+
+  # Virtual Machine
+  - "virtualmachine"
+  - "virtual machine"
+  - "virtualmachineinstance"
+  - "virtual machine instance"
+  - "vmi"
+  - "vmim"
