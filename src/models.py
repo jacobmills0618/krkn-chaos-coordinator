@@ -92,10 +92,13 @@ class GapAnalysis:
 class AgentResult:
     agent_name: str
     bugs_discovered: list[Bug] = field(default_factory=list)
+    bugs_passed_filter: list[FilterResult] = field(default_factory=list)
     bugs_filtered_out: list[FilterResult] = field(default_factory=list)
     bugs_matched: list[ScenarioMatch] = field(default_factory=list)
     gaps: list[GapAnalysis] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # "chaos" = full chaos/injection filter; "domain" = ocp-virt domain keywords only
+    filter_mode: str = "chaos"
 
 
 @dataclass(frozen=True)
