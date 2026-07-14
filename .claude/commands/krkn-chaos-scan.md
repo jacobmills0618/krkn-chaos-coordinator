@@ -33,7 +33,11 @@ If the user query is NOT empty, run in **Targeted Query** mode:
 
 ## Interactive Setup (Full Scan only)
 
-Before running the pipeline, ask the user these questions using AskUserQuestion. Ask all 4 in a single AskUserQuestion call:
+Before running the pipeline, ask the user these questions using AskUserQuestion.
+
+**AskUserQuestion limits:**
+- **At most 4 options per question** (hard API limit).
+- **Batch 1:** Questions 1–4 in **one** `AskUserQuestion` call → **one screen, four tabs** (toggle between questions, submit once).
 
 **Question 1 — OCP Version:**
 - Question: "Which OpenShift version(s) to scan?"
@@ -44,27 +48,46 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
   - "All (4.19, 4.20, 4.21, 4.22)" — Scan across all supported versions
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
-**Question 2 — Agent Scope:**
-- First, discover available agents dynamically:
+**Question 2 — Agent Scope (Tab 2):**
+
+Discover agents first, then embed the full list in the **question text** (not as button options):
+
 ```bash
 cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
-from src.agents.registry import discover_agents
+from src.agents.registry import discover_agents,format_agent_prompt_option
 for name, cfg in sorted(discover_agents().items()):
-    print(f'{name}: {cfg.description}')
+    print(f'{name}\t{format_agent_prompt_option(cfg)}')
 "
 ```
-- Question: "Which domain agent(s) should run?"
-- multiSelect: true
-- Options: "All agents (Recommended)" plus one option per discovered agent (use name and description from the output above)
-- Note: Agents are auto-discovered from config/agents/*.yaml — new agents appear here automatically
+
+Use fixed labels from `config/agents/scan_prompt.yaml` when present; otherwise use `format_agent_prompt_option()` output.
+
+| agent_id | Fixed option label |
+|----------|-------------------|
+| control_plane | Control plane — etcd, API server, scheduler (control_plane) |
+| networking | Networking — OVN, DNS, ingress (networking) |
+| node_machine | Node & machine — kubelet, MCO, bare metal (node_machine) |
+| operators_platform | Operators & platform — OLM, console, monitoring (operators_platform) |
+| storage | Storage — CSI, volumes, registry (storage) |
+| upgrade_lifecycle | Upgrade lifecycle — CVO, MCO, installer (upgrade_lifecycle) |
+| virtualization | OpenShift Virtualization — VM, migration, KubeVirt (virtualization) |
+
+- Question: "Which domain agent(s) should run?\n\nAvailable agents:\n- control_plane — Control plane (etcd, API server, scheduler)\n- networking — OVN, DNS, ingress\n- … (one bullet per discovered agent, with agent_id)\n\nUse agent_id values when specifying agents."
+- Options (only 2 — stays within API limit):
+  - "All agents (Recommended)"
+  - "Input Agent(s)"
+- **If "All agents (Recommended)"** → omit `--agent` (run all discovered agents).
+- **If "Input Agent(s)"** → after the user submits the tabbed form, ask in **chat**: "Enter agent ID(s), comma-separated (e.g. `virtualization` or `control_plane,networking`):". Validate IDs against discovery output; then `--agent <comma-separated ids>`.
+
+Do **not** list each agent as a separate AskUserQuestion option (exceeds 4-option limit with 7+ agents).
 
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
 - Options:
-  - "14 days (Recommended)" — Last 2 weeks of bugs
-  - "7 days" — Last week only (quick scan)
-  - "30 days" — Full month (more thorough)
-  - "60 days" — Deep scan (catches older unfixed bugs)
+  - "7 days" — Last week (Quick scan)
+  - "14 days" — Last 2 weeks (Recommended)
+  - "30 days" — Full month (More thorough)
+  - "365 days" — Full year (Virtualization agent)
 
 **Question 4 — Scan Settings:**
 - Question: "What kind of scan?"
