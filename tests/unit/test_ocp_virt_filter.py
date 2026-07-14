@@ -50,12 +50,12 @@ class TestOcpVirtFilterBug:
         assert not result.chaos_relevant
         assert "documentation" in result.skip_reason.lower()
 
-    def test_cve_virt_bug_is_skipped(self):
+    def test_cve_virt_bug_not_skipped_by_cve_keyword(self):
         result = filter_bug(
             _virt_bug("CVE-2026-12345 kubevirt auth bypass"),
             agent_name="virtualization",
         )
-        assert not result.chaos_relevant
+        assert result.skip_reason is None or "CVE-" not in result.skip_reason
 
     def test_kubevirt_network_partition_is_relevant(self):
         result = filter_bug(

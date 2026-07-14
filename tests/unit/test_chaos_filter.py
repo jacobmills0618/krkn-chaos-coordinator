@@ -18,14 +18,14 @@ def _make_bug(key="TEST-1", summary="", description="", component="Etcd"):
 
 
 class TestFilterBug:
-    def test_cve_is_not_chaos_relevant(self):
+    def test_cve_with_security_tracking_is_not_chaos_relevant(self):
         bug = _make_bug(
             summary="CVE-2026-33413 openshift4/ose-etcd-rhel9: etcd auth bypass",
             description="Security Tracking Issue. Do not make this issue public.",
         )
         result = filter_bug(bug)
         assert not result.chaos_relevant
-        assert "CVE" in result.skip_reason
+        assert "security tracking" in result.skip_reason.lower()
 
     def test_etcd_degradation_under_load_is_relevant(self):
         bug = _make_bug(
