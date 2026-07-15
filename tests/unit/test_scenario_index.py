@@ -5,7 +5,11 @@ from pathlib import Path
 
 import yaml
 
-from src.knowledge.scenario_index import index_scenarios_from_repo, index_plugins_from_repo
+from src.knowledge.scenario_index import (
+    index_plugins_from_repo,
+    index_scenarios_from_repo,
+    scenario_github_url,
+)
 
 
 class TestIndexScenariosFromRepo:
@@ -53,6 +57,39 @@ class TestIndexScenariosFromRepo:
 
         scenarios = index_scenarios_from_repo(tmp_path)
         assert scenarios == []
+
+
+class TestScenarioGithubUrl:
+    def test_builds_url_for_indexed_path(self):
+        path = "scenarios/openshift/etcd_pod_scenarios.yaml"
+        assert scenario_github_url(path) == (
+            "https://github.com/krkn-chaos/krkn/blob/main/scenarios/openshift/etcd_pod_scenarios.yaml"
+        )
+
+    def test_strips_leading_slash(self):
+        assert scenario_github_url("/scenarios/openshift/etcd.yml") == (
+            "https://github.com/krkn-chaos/krkn/blob/main/scenarios/openshift/etcd.yml"
+        )
+
+    def test_returns_existing_url_unchanged(self):
+        url = "https://github.com/krkn-chaos/krkn/blob/main/scenarios/foo.yaml"
+        assert scenario_github_url(url) == url
+
+    def test_returns_none_for_non_scenario_path(self):
+        assert scenario_github_url("node-cpu-hog") is None
+        assert scenario_github_url(None) is None
+        assert scenario_github_url("") is None
+
+    def test_builds_tree_url_for_plugin_directory(self):
+        assert scenario_github_url("krkn/scenario_plugins/pod_disruption/") == (
+            "https://github.com/krkn-chaos/krkn/tree/main/krkn/scenario_plugins/pod_disruption"
+        )
+
+    def test_builds_blob_url_for_plugin_scenario_file(self):
+        path = "krkn/scenario_plugins/pod_disruption/pod_scenarios.yaml"
+        assert scenario_github_url(path) == (
+            "https://github.com/krkn-chaos/krkn/blob/main/krkn/scenario_plugins/pod_disruption/pod_scenarios.yaml"
+        )
 
 
 class TestIndexPluginsFromRepo:
