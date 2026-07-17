@@ -426,8 +426,13 @@ def create_issues_for_gaps(
     owner: str = "krkn-chaos",
     repo: str = "krkn",
     dry_run: bool = True,
+    try_draft_pr: bool = False,
 ) -> list[dict]:
     """Create GitHub issues for each gap.
+
+    When ``try_draft_pr`` is True, HIGH-confidence gaps with a MAP
+    ``base_scenario`` attempt ``create_scenario_pr`` first and fall back to an
+    issue if the PR cannot be created.
 
     Args:
         github: GitHub API client
@@ -436,13 +441,39 @@ def create_issues_for_gaps(
         owner: GitHub repo owner
         repo: GitHub repo name
         dry_run: If True, print what would be created without creating
+        try_draft_pr: If True, prefer draft scenario PRs when eligible
 
     Returns:
-        List of created issue dicts (or dry run previews)
+        List of created issue/PR dicts (or dry run previews)
     """
     results = []
 
     for gap in gaps:
+        if (
+            try_draft_pr
+            and gap.action_type == ActionType.DRAFT_PR
+            and gap.base_scenario
+        ):
+            from src.agents.pr_creator import create_scenario_pr
+
+            try:
+                pr_result = create_scenario_pr(github, gap, dry_run=dry_run)
+            except Exception as e:
+                logger.error(
+                    "Draft PR failed for %s (%s); falling back to issue",
+                    gap.bug.key,
+                    e,
+                )
+                pr_result = None
+
+            if pr_result:
+                results.append({**pr_result, "bug_key": gap.bug.key})
+                continue
+            logger.warning(
+                "Draft PR unavailable for %s — creating GitHub issue instead",
+                gap.bug.key,
+            )
+
         title = build_issue_title(gap)
         body = build_issue_body(gap, agent_name)
 

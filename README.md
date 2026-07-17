@@ -186,7 +186,12 @@ Per-phase routing: `LLM_FILTER_MODEL=claude-sonnet-4-6` · `LLM_ANALYZE_MODEL=cl
 <summary><b>Draft scenario PRs (<code>pr_creator</code>)</b></summary>
 <br/>
 
-Draft PRs copy existing krkn scenario templates chosen by MAP (`gap.base_scenario`). They are **not** created by the interactive ACT prompt in `main.py` today (that path opens GitHub **issues** only). Call `create_scenario_pr` explicitly when you want a draft PR.
+Draft PRs copy existing krkn scenario templates chosen by MAP (`gap.base_scenario`). After a scan, the interactive ACT prompt can enable draft PRs via `create_issues_for_gaps(..., try_draft_pr=True)`:
+
+- **HIGH + MAP match** → try draft scenario PR (falls back to issue on failure)
+- **otherwise** → GitHub issue
+
+Approve gaps, then choose dry-run / live create / issues-only.
 
 **Required for non-dry-run PRs:**
 
@@ -194,7 +199,7 @@ Draft PRs copy existing krkn scenario templates chosen by MAP (`gap.base_scenari
 2. Remotes on that clone: `upstream` → `krkn-chaos/krkn`, `origin` → your fork
 3. `GITHUB_FORK_OWNER` matching the fork owner
 4. Push access to `origin` and a `GITHUB_TOKEN` that can open PRs upstream
-5. A MAP match (`gap.base_scenario`); otherwise PR creation is skipped
+5. A MAP match (`gap.base_scenario`); otherwise ACT opens an issue instead
 
 Draft files are written next to their source template (e.g. a `scenarios/kube/` source stays under `scenarios/kube/`).
 </details>

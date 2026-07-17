@@ -16,9 +16,9 @@ Prerequisites (non-dry-run draft PRs will fail without these):
 * **MAP match:** ``gap.base_scenario`` must be set; otherwise PR creation is
   skipped (use a GitHub issue instead).
 
-Note: the coordinator's interactive ACT path in ``main.py`` currently creates
-GitHub *issues* only. Call ``create_scenario_pr`` explicitly (or wire it into
-ACT) to open draft PRs.
+The coordinator ACT prompt in ``main.py`` can enable this via
+``create_issues_for_gaps(..., try_draft_pr=True)``, falling back to a GitHub
+issue if the PR cannot be created.
 """
 
 from __future__ import annotations
