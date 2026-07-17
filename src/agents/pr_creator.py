@@ -1,4 +1,25 @@
-"""Create draft PRs on GitHub forks for chaos scenario changes."""
+"""Create draft PRs on GitHub forks for chaos scenario changes.
+
+Prerequisites (non-dry-run draft PRs will fail without these):
+
+* **Up-to-date local krkn clone** at ``KRKN_REPO_PATH`` (default ``~/krkn``).
+  Templates are copied from this tree; an outdated or missing clone yields empty
+  or wrong candidates. Run ``git -C $KRKN_REPO_PATH fetch upstream && git -C
+  $KRKN_REPO_PATH checkout main && git -C $KRKN_REPO_PATH merge upstream/main``
+  (or equivalent) before creating PRs.
+* **Git remotes on that clone:** ``upstream`` → ``krkn-chaos/krkn``, ``origin`` →
+  your fork.
+* **``GITHUB_FORK_OWNER``** set to the GitHub user/org that owns the fork (the
+  PR ``head`` is ``{FORK_OWNER}:{branch}``).
+* **Push permission** to ``origin`` and a ``GITHUB_TOKEN`` that can open PRs
+  against the upstream repo.
+* **MAP match:** ``gap.base_scenario`` must be set; otherwise PR creation is
+  skipped (use a GitHub issue instead).
+
+Note: the coordinator's interactive ACT path in ``main.py`` currently creates
+GitHub *issues* only. Call ``create_scenario_pr`` explicitly (or wire it into
+ACT) to open draft PRs.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +33,6 @@ from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
-from src.agents.act import _infer_injection_method, _scenario_type_from_plugin
 from src.apis.github_client import GitHubClient
 from src.knowledge.scenario_index import ScenarioInfo, index_scenarios_from_repo
 from src.models import GapAnalysis
@@ -36,39 +56,9 @@ FORK_PATHS = {
 
 FORK_OWNER = os.environ.get("GITHUB_FORK_OWNER", "krkn-chaos")
 
-# Fallback example templates when MAP did not set base_scenario (plugin dir → paths).
-FALLBACK_SCENARIO_EXAMPLES: dict[str, tuple[str, ...]] = {
-    "hog_scenarios": ("scenarios/kube/cpu-hog.yml", "scenarios/kube/memory-hog.yml"),
-    "node_scenarios": (
-        "scenarios/openshift/aws_node_scenarios.yml",
-        "scenarios/openshift/baremetal_node_scenarios.yml",
-    ),
-    "network_chaos_scenarios": ("scenarios/openshift/network_chaos.yaml",),
-    "network_chaos_ng_scenarios": ("scenarios/kube/pod-network-chaos.yml",),
-    "application_outages_scenarios": ("scenarios/openshift/app_outage.yaml",),
-    "container_scenarios": ("scenarios/openshift/container_etcd.yml",),
-    "http_load_scenarios": ("scenarios/kube/http_load_scenario.yml",),
-    "kubevirt_vm_outage": ("scenarios/kubevirt/kubevirt-vm-outage.yaml",),
-    "managedcluster_scenarios": ("scenarios/kube/managedcluster_scenarios_example.yml",),
-    "pvc_scenarios": ("scenarios/openshift/pvc_scenario.yaml",),
-    "service_disruption_scenarios": ("scenarios/openshift/ingress_namespace.yaml",),
-    "service_hijacking_scenarios": ("scenarios/kube/service_hijacking.yaml",),
-    "cluster_shut_down_scenarios": ("scenarios/openshift/cluster_shut_down_scenario.yml",),
-    "storage_throttle_scenarios": ("scenarios/openshift/storage_throttle.yaml",),
-    "syn_flood_scenarios": ("scenarios/kube/syn_flood.yaml",),
-    "time_scenarios": ("scenarios/openshift/time_scenarios_example.yml",),
-    "zone_outages_scenarios": ("scenarios/openshift/zone_outage.yaml",),
-    "pod_disruption_scenarios": (
-        "scenarios/openshift/etcd.yml",
-        "scenarios/openshift/container_etcd.yml",
-    ),
-}
-
-# Backward-compatible alias for tests and external imports.
-CANONICAL_SCENARIO_EXAMPLES = FALLBACK_SCENARIO_EXAMPLES
-
 MAX_SCENARIO_CANDIDATES = 5
-SCENARIO_OUTPUT_DIR = "scenarios/openshift"
+# Used only when a stub filename has no source path to inherit from.
+DEFAULT_SCENARIO_OUTPUT_DIR = "scenarios/openshift"
 
 
 @lru_cache(maxsize=4)
@@ -182,7 +172,13 @@ def _related_paths_from_index(
 
 
 def _collect_template_paths(gap: GapAnalysis, krkn_path: Path) -> tuple[list[str], str, str | None]:
-    """Return ordered template paths, selection source label, and scenario type hint."""
+    """Return ordered template paths from MAP's ``gap.base_scenario``.
+
+    Requires a MAP match. Returns empty paths when ``base_scenario`` is unset.
+    """
+    if not gap.base_scenario:
+        return [], "no MAP match (gap.base_scenario unset)", None
+
     text = _bug_text(gap)
     index = _load_scenario_index(str(krkn_path))
     rel_paths: list[str] = []
@@ -193,39 +189,37 @@ def _collect_template_paths(gap: GapAnalysis, krkn_path: Path) -> tuple[list[str
             rel_paths.append(rel)
             seen.add(rel)
 
-    if gap.base_scenario:
-        add(gap.base_scenario)
+    add(gap.base_scenario)
 
-        info = _lookup_scenario_info(index, gap.base_scenario)
-        if info:
-            for rel in _related_paths_from_index(index, info.scenario_type, seen):
-                add(rel)
-
-        for rel in _sibling_scenario_paths(krkn_path, gap.base_scenario):
+    info = _lookup_scenario_info(index, gap.base_scenario)
+    if info:
+        for rel in _related_paths_from_index(index, info.scenario_type, seen):
             add(rel)
 
-        rel_paths[1:] = sorted(
-            rel_paths[1:],
-            key=lambda p: _score_template_path(p, text),
-            reverse=True,
-        )
-        scenario_type = info.scenario_type if info else "unknown"
-        return rel_paths, "MAP phase match (gap.base_scenario)", scenario_type
-
-    _, plugin, _ = _infer_injection_method(gap)
-    scenario_type = _scenario_type_from_plugin(plugin)
-    fallback = list(FALLBACK_SCENARIO_EXAMPLES.get(scenario_type, ()))
-    fallback.sort(key=lambda p: _score_template_path(p, text), reverse=True)
-    for rel in fallback:
+    for rel in _sibling_scenario_paths(krkn_path, gap.base_scenario):
         add(rel)
 
-    return rel_paths, "keyword fallback (no MAP match)", scenario_type
+    rel_paths[1:] = sorted(
+        rel_paths[1:],
+        key=lambda p: _score_template_path(p, text),
+        reverse=True,
+    )
+    scenario_type = info.scenario_type if info else "unknown"
+    return rel_paths, "MAP phase match (gap.base_scenario)", scenario_type
 
 
 def _candidate_filename(bug_key: str, source_path: Path) -> str:
     stem = source_path.stem.replace(".", "-")
     stem = re.sub(r"[^a-zA-Z0-9_-]+", "-", stem).strip("-")
     return f"{bug_key}-candidate-{stem}.yaml"
+
+
+def _output_path_for_source(krkn_path: Path, source: Path, out_name: str) -> str:
+    """Keep drafts in the same scenarios/ subdirectory as the source template."""
+    rel_parent = source.parent.relative_to(krkn_path).as_posix()
+    if not rel_parent.startswith("scenarios"):
+        rel_parent = DEFAULT_SCENARIO_OUTPUT_DIR
+    return f"{rel_parent}/{out_name}"
 
 
 def _template_header(
@@ -259,11 +253,10 @@ def collect_related_scenario_templates(
 ) -> list[tuple[str, str, str]]:
     """Collect suffix-named drafts copied from krkn example files.
 
-    Selection flow:
-      1. **Primary:** ``gap.base_scenario`` from MAP/ANALYZE (Chroma + LLM)
-      2. **Related:** same scenario type (scenario index) + sibling YAML in same dir
-      3. **Fallback:** keyword inference + ``FALLBACK_SCENARIO_EXAMPLES`` only when
-         ``base_scenario`` is unset
+    Selection flow (MAP-only — no keyword fallback):
+      1. Require ``gap.base_scenario`` from MAP/ANALYZE (Chroma + LLM)
+      2. Add related files: same scenario type (index) + sibling YAML in same dir
+      3. If ``base_scenario`` is unset, return no candidates (skip PR)
 
     Returns list of (repo_relative_output_path, yaml_content, source_template_path).
     """
@@ -271,6 +264,13 @@ def collect_related_scenario_templates(
     bug_key = gap.bug.key.upper()
 
     rel_paths, selection_source, scenario_type = _collect_template_paths(gap, krkn_path)
+
+    if not gap.base_scenario:
+        logger.info(
+            "Skipping scenario drafts for %s: no MAP match (base_scenario unset)",
+            gap.bug.key,
+        )
+        return []
 
     ordered_sources: list[Path] = []
     for rel in rel_paths:
@@ -280,10 +280,11 @@ def collect_related_scenario_templates(
 
     if not ordered_sources:
         logger.warning(
-            "No krkn templates for %s (%s) under %s",
+            "No krkn templates for %s (%s) under %s — MAP path %s not found locally",
             gap.bug.key,
             selection_source,
             krkn_path,
+            gap.base_scenario,
         )
         return []
 
@@ -298,9 +299,9 @@ def collect_related_scenario_templates(
             out_name = out_name.replace(".yaml", "-alt.yaml")
         used_names.add(out_name)
 
-        out_path = f"{SCENARIO_OUTPUT_DIR}/{out_name}"
+        out_path = _output_path_for_source(krkn_path, source, out_name)
         content = _template_header(
-            gap, scenario_type, rel_source, out_name, selection_source,
+            gap, scenario_type or "unknown", rel_source, out_name, selection_source,
         ) + body
         candidates.append((out_path, content, rel_source))
 
@@ -314,7 +315,7 @@ def generate_scenario_candidates(
 ) -> list[tuple[str, str]]:
     """Generate suffix-named scenario drafts for a PR.
 
-    Returns list of (repo_relative_path, yaml_content).
+    Returns list of (repo_relative_path, yaml_content). Empty if no MAP match.
     """
     return [
         (path, content)
@@ -330,7 +331,7 @@ def generate_scenario_yaml(
 ) -> tuple[str, str]:
     """Generate scenario YAML for backward-compatible single-file callers.
 
-    Returns the first candidate, or a minimal stub if no templates exist.
+    Returns the first candidate, or a stub explaining why no draft was produced.
     """
     candidates = generate_scenario_candidates(
         gap, krkn_path=krkn_path, max_candidates=1,
@@ -340,21 +341,22 @@ def generate_scenario_yaml(
         return content, Path(path).name
 
     bug = gap.bug
-    component = bug.component.lower().replace(" ", "_").replace("/", "_")
-    bug_id = bug.key.lower().replace("-", "_")
     filename = f"{bug.key.upper()}-candidate-stub.yaml"
-    _, _, scenario_type = _collect_template_paths(gap, krkn_path or FORK_PATHS["krkn"])
-    selection = (
-        "MAP phase match (gap.base_scenario)"
-        if gap.base_scenario
-        else "keyword fallback (no MAP match)"
-    )
-    header = _template_header(gap, scenario_type or "unknown", "<none>", filename, selection)
-    stub = (
-        f"{header}# No matching templates found under KRKN_REPO_PATH.\n"
-        f"# Clone krkn and re-run, or author a scenario manually for {component}/{bug_id}.\n"
-    )
-    return stub, filename
+    if not gap.base_scenario:
+        selection = "no MAP match (gap.base_scenario unset)"
+        reason = (
+            "# No MAP match — gap.base_scenario is unset.\n"
+            "# Draft PRs require a MAP/ANALYZE scenario path; create a GitHub issue instead,\n"
+            "# or re-run MAP after ingesting scenarios into ChromaDB.\n"
+        )
+    else:
+        selection = "MAP phase match (gap.base_scenario)"
+        reason = (
+            f"# MAP matched `{gap.base_scenario}` but the file was not found under KRKN_REPO_PATH.\n"
+            "# Clone/update the local krkn repo and re-run.\n"
+        )
+    header = _template_header(gap, "unknown", "<none>", filename, selection)
+    return header + reason, filename
 
 
 def create_scenario_pr(
@@ -367,19 +369,24 @@ def create_scenario_pr(
 ) -> dict | None:
     """Create a PR on krkn-chaos/krkn with draft scenario YAML candidate(s).
 
-    Pass ``scenario_files`` as a list of (repo_relative_path, content), or omit to
-    auto-generate suffix-named candidates from the local krkn repo.
+    Requires a MAP match (``gap.base_scenario``) unless ``scenario_files`` are passed
+    explicitly. Pass ``scenario_files`` as a list of (repo_relative_path, content),
+    or omit to auto-generate suffix-named candidates from the local krkn repo.
     """
     repo_path = FORK_PATHS["krkn"]
     branch_name = f"chaos-coordinator/{gap.bug.key.lower()}"
 
     if scenario_files is None:
-        scenario_files = generate_scenario_candidates(gap)
-    elif scenario_yaml and scenario_filename:
-        scenario_files = [(f"{SCENARIO_OUTPUT_DIR}/{scenario_filename}", scenario_yaml)]
+        if scenario_yaml and scenario_filename:
+            scenario_files = [(f"{DEFAULT_SCENARIO_OUTPUT_DIR}/{scenario_filename}", scenario_yaml)]
+        else:
+            scenario_files = generate_scenario_candidates(gap)
 
     if not scenario_files:
-        logger.error("No scenario candidates to add for %s", gap.bug.key)
+        logger.error(
+            "No scenario candidates for %s (need gap.base_scenario from MAP)",
+            gap.bug.key,
+        )
         return None
 
     scenario_paths = [path for path, _ in scenario_files]
@@ -388,15 +395,32 @@ def create_scenario_pr(
         logger.info("DRY RUN — would create PR:")
         logger.info("  Repo: %s/%s -> %s/%s", FORK_OWNER, "krkn", UPSTREAM_OWNER, "krkn")
         logger.info("  Branch: %s", branch_name)
+        logger.info(
+            "  Requires: up-to-date KRKN_REPO_PATH=%s, remotes upstream+origin, "
+            "GITHUB_FORK_OWNER=%s, push + PR permissions",
+            repo_path,
+            FORK_OWNER,
+        )
         for path in scenario_paths:
             logger.info("  File: %s", path)
         return {"dry_run": True, "branch": branch_name, "files": scenario_paths}
 
     if not repo_path.exists():
-        logger.error("krkn repo not found at %s", repo_path)
+        logger.error(
+            "krkn repo not found at %s — set KRKN_REPO_PATH to an up-to-date local clone",
+            repo_path,
+        )
         return None
 
     if not _create_branch(repo_path, branch_name):
+        logger.error(
+            "Branch setup failed for %s — ensure remotes exist: "
+            "`upstream` → %s/%s and `origin` → your fork (%s), and that you can push",
+            branch_name,
+            UPSTREAM_OWNER,
+            _UPSTREAM_REPO,
+            FORK_OWNER,
+        )
         return None
 
     try:
