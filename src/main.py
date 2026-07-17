@@ -180,16 +180,26 @@ def main():
 
 
 def _prompt_github_issues(gaps: list, github: GitHubClient) -> None:
-    """Prompt the user to select which gaps to post as GitHub issues."""
-    from src.agents.act import build_issue_title, build_issue_body, LABEL
+    """Prompt the user to select which gaps to act on (draft PR or issue)."""
+    from src.agents.act import create_issues_for_gaps
+    from src.models import ActionType
 
     print("\n" + "=" * 60)
-    print("Post gaps as GitHub issues?")
+    print("Post gaps as GitHub issues / draft PRs?")
+    print("  (HIGH + MAP match → draft PR when enabled; else issue)")
     print("=" * 60)
     print()
     for i, gap in enumerate(gaps, 1):
         level = gap.confidence_level.value.upper()
-        print(f"  {i}. [{level} {gap.confidence_score}/100] {gap.bug.key}: {gap.bug.summary[:60]}")
+        kind = (
+            "draft PR"
+            if gap.action_type == ActionType.DRAFT_PR and gap.base_scenario
+            else "issue"
+        )
+        print(
+            f"  {i}. [{level} {gap.confidence_score}/100] "
+            f"{gap.bug.key}: {gap.bug.summary[:60]}  ({kind})"
+        )
     print()
     print("  Enter numbers to post (e.g., '1,3'), 'all', or 'none':")
 
@@ -217,27 +227,58 @@ def _prompt_github_issues(gaps: list, github: GitHubClient) -> None:
         print("  No valid selections. Skipped.")
         return
 
+    selected_gaps = [gaps[i] for i in selected]
     owner = os.environ.get("GITHUB_FORK_OWNER", "krkn-chaos")
-    repo = "krkn"
+
+    # Default: try draft PRs for eligible gaps, but dry-run until confirmed.
+    dry_run = True
+    try_draft_pr = True
+    if any(
+        g.action_type == ActionType.DRAFT_PR and g.base_scenario
+        for g in selected_gaps
+    ):
+        print()
+        print("  Draft PR mode: [d]ry-run (default) / [y]es create / [i]ssues only")
+        try:
+            pr_choice = input("  → ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Skipped.")
+            return
+        if pr_choice in ("y", "yes"):
+            dry_run = False
+        elif pr_choice in ("i", "issue", "issues"):
+            try_draft_pr = False
+            dry_run = False
+    else:
+        print()
+        print("  Create issues for real? [y/N]")
+        try:
+            if input("  → ").strip().lower() in ("y", "yes"):
+                dry_run = False
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Skipped.")
+            return
 
     try:
-        print(f"\n  Creating {len(selected)} issue(s) on {owner}/{repo}...")
-        for i in selected:
-            gap = gaps[i]
-            title = build_issue_title(gap)
-            body = build_issue_body(gap, agent_name="coordinator")
-
-            result = github.create_issue(
-                owner=owner,
-                repo=repo,
-                title=title,
-                body=body,
-                labels=[LABEL],
-            )
-            if result:
-                print(f"  ✓ {gap.bug.key}: {result.get('html_url', 'created')}")
+        print(f"\n  Creating action(s) on {owner}/krkn...")
+        results = create_issues_for_gaps(
+            github,
+            selected_gaps,
+            agent_name="coordinator",
+            owner=owner,
+            dry_run=dry_run,
+            try_draft_pr=try_draft_pr,
+        )
+        for result in results:
+            bug_key = result.get("bug_key", "?")
+            url = result.get("html_url")
+            if result.get("dry_run"):
+                files = result.get("files")
+                print(f"  ○ {bug_key}: dry-run" + (f" files={files}" if files else ""))
+            elif url:
+                print(f"  ✓ {bug_key}: {url}")
             else:
-                print(f"  ✗ {gap.bug.key}: failed to create issue")
+                print(f"  ✓ {bug_key}: created")
     except KeyboardInterrupt:
         print("\n  Issue creation interrupted.")
 
