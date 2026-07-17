@@ -1,13 +1,12 @@
 """Tests for draft PR scenario YAML generation."""
 
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from src.agents.act import PLUGIN_REGISTRY, _plugin_path, _scenario_type_from_plugin
 from src.agents.pr_creator import (
     collect_related_scenario_templates,
+    create_scenario_pr,
     generate_scenario_candidates,
     generate_scenario_yaml,
 )
@@ -28,7 +27,7 @@ def _bug(summary: str, component: str = "Etcd") -> Bug:
 
 
 @pytest.fixture
-def mini_krkn(tmp_path: Path) -> Path:
+def krkn(tmp_path: Path) -> Path:
     """Minimal krkn repo with a few scenario templates."""
     (tmp_path / "scenarios" / "openshift").mkdir(parents=True)
     (tmp_path / "scenarios" / "kube").mkdir(parents=True)
@@ -50,19 +49,19 @@ def mini_krkn(tmp_path: Path) -> Path:
 
 
 class TestGenerateScenarioCandidates:
-    def test_map_base_scenario_includes_siblings(self, mini_krkn: Path):
+    def test_map_base_scenario_includes_siblings(self, krkn: Path):
         gap = GapAnalysis(
             bug=_bug("etcd crash under load"),
             base_scenario="scenarios/openshift/etcd.yml",
         )
-        candidates = generate_scenario_candidates(gap, krkn_path=mini_krkn)
+        candidates = generate_scenario_candidates(gap, krkn_path=krkn)
 
         assert len(candidates) >= 2
         paths = [p for p, _ in candidates]
         assert all("OCPBUGS-9999-candidate-" in p for p in paths)
         assert all(p.startswith("scenarios/openshift/") for p in paths)
 
-        templates = collect_related_scenario_templates(gap, krkn_path=mini_krkn)
+        templates = collect_related_scenario_templates(gap, krkn_path=krkn)
         assert templates[0][2] == "scenarios/openshift/etcd.yml"
 
         for _path, content in candidates:
@@ -71,96 +70,76 @@ class TestGenerateScenarioCandidates:
             assert "MAP base scenario:" in content
             assert "Source template:" in content
 
-    def test_map_match_does_not_call_keyword_inference(self, mini_krkn: Path):
+    def test_output_path_preserves_source_directory(self, krkn: Path):
         gap = GapAnalysis(
-            bug=_bug("network partition"),
-            base_scenario="scenarios/openshift/etcd.yml",
+            bug=_bug("cpu pressure on masters"),
+            base_scenario="scenarios/kube/cpu-hog.yml",
         )
-        with patch("src.agents.pr_creator._infer_injection_method") as mock_infer:
-            candidates = generate_scenario_candidates(gap, krkn_path=mini_krkn)
+        candidates = generate_scenario_candidates(gap, krkn_path=krkn)
+        assert candidates
+        assert candidates[0][0].startswith("scenarios/kube/")
+        assert "OCPBUGS-9999-candidate-cpu-hog.yaml" in candidates[0][0]
 
-        mock_infer.assert_not_called()
-        assert "kill-pods" in candidates[0][1]
-
-    def test_base_scenario_prioritized(self, mini_krkn: Path):
+    def test_base_scenario_prioritized(self, krkn: Path):
         gap = GapAnalysis(
             bug=_bug("etcd issue"),
             base_scenario="scenarios/openshift/container_etcd.yml",
         )
-        templates = collect_related_scenario_templates(gap, krkn_path=mini_krkn)
+        templates = collect_related_scenario_templates(gap, krkn_path=krkn)
         assert templates[0][2] == "scenarios/openshift/container_etcd.yml"
 
-    def test_hog_scenario_via_fallback_inference(self, mini_krkn: Path):
-        gap = GapAnalysis(
-            bug=_bug("api server throttling under resource pressure on masters")
-        )
-        candidates = generate_scenario_candidates(gap, krkn_path=mini_krkn)
-        assert candidates
-        assert "keyword fallback" in candidates[0][1]
-        assert "hog-type: cpu" in candidates[0][1]
+    def test_no_map_match_returns_no_candidates(self, krkn: Path):
+        gap = GapAnalysis(bug=_bug("api server throttling under resource pressure"))
+        assert generate_scenario_candidates(gap, krkn_path=krkn) == []
+        assert collect_related_scenario_templates(gap, krkn_path=krkn) == []
 
-    def test_network_scenario_via_fallback_inference(self, mini_krkn: Path):
+    def test_no_map_match_stub_explains_skip(self, krkn: Path):
         gap = GapAnalysis(bug=_bug("network partition causes ingress latency"))
-        candidates = generate_scenario_candidates(gap, krkn_path=mini_krkn)
-        assert candidates
-        assert "keyword fallback" in candidates[0][1]
-        assert "network_chaos" in candidates[0][1]
+        content, filename = generate_scenario_yaml(gap, krkn_path=krkn)
+        assert filename.endswith("-candidate-stub.yaml")
+        assert "No MAP match" in content
+        assert "base_scenario is unset" in content
 
-    def test_generate_scenario_yaml_returns_first_candidate(self, mini_krkn: Path):
+    def test_missing_base_still_uses_siblings(self, krkn: Path):
+        """If MAP path is missing locally but siblings exist, use those."""
+        gap = GapAnalysis(
+            bug=_bug("etcd crash"),
+            base_scenario="scenarios/openshift/does-not-exist.yml",
+        )
+        candidates = generate_scenario_candidates(gap, krkn_path=krkn)
+        assert candidates
+        assert "does-not-exist" not in candidates[0][0]
+
+    def test_missing_local_template_stub(self, krkn: Path):
+        gap = GapAnalysis(
+            bug=_bug("etcd crash"),
+            base_scenario="scenarios/nowhere/missing.yml",
+        )
+        content, filename = generate_scenario_yaml(gap, krkn_path=krkn)
+        assert filename.endswith("-candidate-stub.yaml")
+        assert "not found under KRKN_REPO_PATH" in content
+
+    def test_generate_scenario_yaml_returns_first_candidate(self, krkn: Path):
         gap = GapAnalysis(
             bug=_bug("etcd crash"),
             base_scenario="scenarios/openshift/etcd.yml",
         )
-        content, filename = generate_scenario_yaml(gap, krkn_path=mini_krkn)
+        content, filename = generate_scenario_yaml(gap, krkn_path=krkn)
 
         assert filename.startswith("OCPBUGS-9999-candidate-")
         assert "kill-pods" in content or "label_selector" in content
 
-    @pytest.mark.parametrize("plugin_dir,scenario_type", PLUGIN_REGISTRY.items())
-    def test_each_registry_type_generates_output(
-        self, plugin_dir: str, scenario_type: str, mini_krkn: Path
-    ):
-        gap = GapAnalysis(bug=_bug("test"))
-        with patch(
-            "src.agents.pr_creator._infer_injection_method",
-            return_value=("method", _plugin_path(plugin_dir), "hint"),
-        ):
-            content, filename = generate_scenario_yaml(gap, krkn_path=mini_krkn)
-
-        assert filename.endswith(".yaml")
-        assert "OCPBUGS-9999-candidate-" in filename
-        assert "Generated by krkn-chaos-coordinator" in content
-        if scenario_type in {
-            "hog_scenarios",
-            "pod_disruption_scenarios",
-            "network_chaos_scenarios",
-            "container_scenarios",
-        }:
-            assert "Source template:" in content
-        else:
-            assert "No matching templates" in content
-
-    def test_unknown_plugin_path_falls_back_to_pod_disruption(self):
-        assert _scenario_type_from_plugin(_plugin_path("unknown_plugin")) == "pod_disruption_scenarios"
-
-    def test_fallback_ranks_matching_template(self, mini_krkn: Path):
-        gap = GapAnalysis(
-            bug=_bug("container restart loop in etcd pod", component="Etcd"),
-        )
-        with patch(
-            "src.agents.pr_creator._infer_injection_method",
-            return_value=("method", _plugin_path("pod_disruption"), "hint"),
-        ):
-            templates = collect_related_scenario_templates(gap, krkn_path=mini_krkn)
-
-        assert templates[0][2] == "scenarios/openshift/container_etcd.yml"
-
-    def test_max_candidates_cap(self, mini_krkn: Path):
+    def test_max_candidates_cap(self, krkn: Path):
         gap = GapAnalysis(
             bug=_bug("etcd crash"),
             base_scenario="scenarios/openshift/etcd.yml",
         )
         candidates = generate_scenario_candidates(
-            gap, krkn_path=mini_krkn, max_candidates=1,
+            gap, krkn_path=krkn, max_candidates=1,
         )
         assert len(candidates) == 1
+
+    def test_create_scenario_pr_skips_without_map_match(self):
+        gap = GapAnalysis(bug=_bug("unrelated failure"))
+        result = create_scenario_pr(github=None, gap=gap, dry_run=True)
+        assert result is None

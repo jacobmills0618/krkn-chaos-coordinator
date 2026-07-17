@@ -177,8 +177,26 @@ Per-phase routing: `LLM_FILTER_MODEL=claude-sonnet-4-6` · `LLM_ANALYZE_MODEL=cl
 | `GITHUB_TOKEN` | Yes | — | [Generate here](https://github.com/settings/tokens) |
 | `NEO4J_PASSWORD` | Yes | `password` | Neo4j password |
 | `LLM_PROVIDER` | No | auto-detected | `claude_code` · `anthropic` · `ollama` · `openai` · `google` · `none` |
-| `KRKN_REPO_PATH` | No | `~/krkn` | Local krkn clone path |
+| `KRKN_REPO_PATH` | No* | `~/krkn` | Local krkn clone path (*required & up-to-date for draft scenario PRs) |
+| `GITHUB_FORK_OWNER` | No* | `krkn-chaos` | GitHub user/org owning the fork used as PR `head` (*required for draft PRs) |
 | `OCP_RELEASE` | No | `4.21` | Target OpenShift release |
+</details>
+
+<details>
+<summary><b>Draft scenario PRs (<code>pr_creator</code>)</b></summary>
+<br/>
+
+Draft PRs copy existing krkn scenario templates chosen by MAP (`gap.base_scenario`). They are **not** created by the interactive ACT prompt in `main.py` today (that path opens GitHub **issues** only). Call `create_scenario_pr` explicitly when you want a draft PR.
+
+**Required for non-dry-run PRs:**
+
+1. Up-to-date local krkn clone at `KRKN_REPO_PATH`
+2. Remotes on that clone: `upstream` → `krkn-chaos/krkn`, `origin` → your fork
+3. `GITHUB_FORK_OWNER` matching the fork owner
+4. Push access to `origin` and a `GITHUB_TOKEN` that can open PRs upstream
+5. A MAP match (`gap.base_scenario`); otherwise PR creation is skipped
+
+Draft files are written next to their source template (e.g. a `scenarios/kube/` source stays under `scenarios/kube/`).
 </details>
 
 <details>
