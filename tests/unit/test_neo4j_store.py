@@ -64,6 +64,7 @@ class FakeMemoryRepository:
                     "action_type": gap.action_type.value,
                     "reasoning": gap.reasoning,
                     "base_scenario": gap.base_scenario,
+                    "krkn_plugin": gap.krkn_plugin,
                     "status": "open",
                     "agent": result.agent_name,
                     "opened_at": timestamp,

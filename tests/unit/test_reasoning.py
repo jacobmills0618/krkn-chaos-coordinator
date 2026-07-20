@@ -99,6 +99,25 @@ class TestLlmMapMatch:
 
         assert result.match_result == MatchResult.NO_MATCH
         assert result.matched_scenario is None
+        assert result.filter_injection_method == "resource pressure"
+
+    @patch("src.reasoning.call_llm")
+    def test_soft_partial_when_no_match_but_chroma_hit(self, mock_llm):
+        mock_llm.return_value = json.dumps({
+            "match": "NO_MATCH",
+            "matched_scenario": None,
+            "explanation": "Nothing exact.",
+        })
+        bug = _make_bug(summary="etcd under load")
+        filter_result = _make_filter_result(bug)
+        hits = [{
+            "text": "Scenario file: scenarios/openshift/etcd.yml\netcd kill",
+            "distance": 0.7,
+        }]
+        result = llm_map_match(bug, filter_result, hits, [])
+        assert result.match_result == MatchResult.PARTIAL_MATCH
+        assert result.matched_scenario == "scenarios/openshift/etcd.yml"
+        assert result.similarity_score < 0.5
 
     @patch("src.reasoning.call_llm")
     def test_falls_back_on_invalid_json(self, mock_llm):
@@ -126,8 +145,15 @@ class TestLlmMapMatch:
 class TestLlmAnalyzeGap:
     """Test LLM-enhanced gap analysis."""
 
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
     @patch("src.reasoning.call_llm")
-    def test_high_confidence_with_specific_modifications(self, mock_llm):
+    def test_high_confidence_with_specific_modifications(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["hogs", "network_chaos"],
+            "scenarios": ["scenarios/openshift/network_chaos.yaml"],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
         mock_llm.return_value = json.dumps({
             "confidence_score": 85,
             "reasoning": "Clear failure mode: CPU stress causes OVN state desync. cpu_hog_scenarios plugin can inject this. OVN architecture is well documented.",
@@ -136,7 +162,7 @@ class TestLlmAnalyzeGap:
                 "While hog is active, validate OVN state: ovs-vsctl show + ovn-sbctl list chassis",
                 "Assert: ovn-controller chassis bindings remain synchronized under CPU pressure",
             ],
-            "krkn_plugin": "cpu_hog_scenarios",
+            "krkn_plugin": "hogs",
             "repos_to_update": ["krkn", "krkn-hub"],
         })
 
@@ -162,11 +188,19 @@ class TestLlmAnalyzeGap:
         assert gap.confidence_score == 85
         assert gap.confidence_level == Confidence.HIGH
         assert gap.action_type == ActionType.DRAFT_PR
+        assert gap.krkn_plugin == "hogs"
         assert len(gap.modifications) == 3
         assert "cpu" in gap.reasoning.lower()
 
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
     @patch("src.reasoning.call_llm")
-    def test_low_confidence_when_llm_uncertain(self, mock_llm):
+    def test_low_confidence_when_llm_uncertain(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["pod_disruption"],
+            "scenarios": [],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
         mock_llm.return_value = json.dumps({
             "confidence_score": 25,
             "reasoning": "Unclear failure mode. No obvious krkn plugin matches admission webhook delays.",
@@ -187,8 +221,93 @@ class TestLlmAnalyzeGap:
         assert gap.confidence_level == Confidence.LOW
         assert gap.action_type == ActionType.GITHUB_ISSUE
 
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
     @patch("src.reasoning.call_llm")
-    def test_falls_back_on_invalid_json(self, mock_llm):
+    def test_medium_without_plugin_triggers_compact_pick(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["network_chaos", "pod_disruption", "hogs"],
+            "scenarios": ["scenarios/openshift/network_chaos.yaml"],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
+        mock_llm.side_effect = [
+            json.dumps({
+                "confidence_score": 55,
+                "reasoning": "Clear gap but forgot plugin",
+                "modifications": ["add scenario"],
+                "krkn_plugin": None,
+                "repos_to_update": ["krkn"],
+            }),
+            json.dumps({"krkn_plugin": "network_chaos", "reasoning": "network failure"}),
+        ]
+        bug = _make_bug(summary="network partition breaks SDN", description="x" * 250)
+        match = ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH)
+        gap = llm_analyze_gap(bug, match, [], [], [])
+        assert gap.confidence_score == 55
+        assert gap.confidence_level == Confidence.MEDIUM
+        assert gap.krkn_plugin == "network_chaos"
+        assert mock_llm.call_count == 2
+
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
+    @patch("src.reasoning.call_llm")
+    def test_evidence_cap_without_plugin_or_base(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["pod_disruption"],
+            "scenarios": [],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
+        mock_llm.side_effect = [
+            json.dumps({
+                "confidence_score": 50,
+                "reasoning": "Looks like a gap",
+                "modifications": [],
+                "krkn_plugin": None,
+                "repos_to_update": [],
+            }),
+            json.dumps({"krkn_plugin": None}),
+        ]
+        bug = _make_bug(summary="obscure failure")
+        match = ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH)
+        gap = llm_analyze_gap(bug, match, [], [], [])
+        assert gap.confidence_score == 39
+        assert gap.confidence_level == Confidence.LOW
+        assert gap.krkn_plugin is None
+
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
+    @patch("src.reasoning.call_llm")
+    def test_analyze_rejects_invented_plugin_not_in_repo(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["network_chaos", "hogs"],
+            "scenarios": [],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
+        mock_llm.side_effect = [
+            json.dumps({
+                "confidence_score": 60,
+                "reasoning": "gap",
+                "modifications": ["x"],
+                "krkn_plugin": "totally_fake_plugin",
+                "repos_to_update": ["krkn"],
+            }),
+            json.dumps({"krkn_plugin": "hogs", "reasoning": "cpu pressure"}),
+        ]
+        bug = _make_bug(summary="API server throttling under load")
+        match = ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH)
+        gap = llm_analyze_gap(bug, match, [], [], [])
+        assert gap.krkn_plugin == "hogs"
+        assert gap.confidence_score == 60
+
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
+    @patch("src.reasoning.call_llm")
+    def test_falls_back_on_invalid_json(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["pod_disruption"],
+            "scenarios": [],
+            "source": "fallback",
+            "repo_path": "/tmp/krkn",
+        }
         mock_llm.return_value = "This is not JSON"
 
         bug = _make_bug(summary="some bug")
@@ -197,15 +316,23 @@ class TestLlmAnalyzeGap:
         gap = llm_analyze_gap(bug=bug, match=match, ocp_docs=[], krkn_docs=[], neo4j_history=[])
 
         assert isinstance(gap, GapAnalysis)
-        assert gap.confidence_score >= 0
+        assert gap.confidence_level == Confidence.LOW
+        assert gap.confidence_score < 40
 
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
     @patch("src.reasoning.call_llm")
-    def test_clamps_score_to_valid_range(self, mock_llm):
+    def test_clamps_score_to_valid_range(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["pod_disruption"],
+            "scenarios": [],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
         mock_llm.return_value = json.dumps({
             "confidence_score": 150,
             "reasoning": "Very confident",
             "modifications": ["do something"],
-            "krkn_plugin": "pod_scenarios",
+            "krkn_plugin": "pod_disruption",
             "repos_to_update": ["krkn"],
         })
 
@@ -215,3 +342,4 @@ class TestLlmAnalyzeGap:
         gap = llm_analyze_gap(bug=bug, match=match, ocp_docs=[], krkn_docs=[], neo4j_history=[])
 
         assert gap.confidence_score <= 100
+        assert gap.krkn_plugin == "pod_disruption"

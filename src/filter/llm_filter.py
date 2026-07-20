@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 
 from dataclasses import dataclass, field
@@ -141,10 +142,13 @@ def call_llm(
         if sys_parts:
             cmd.extend(["--system-prompt", "\n\n".join(sys_parts)])
 
+        timeout_s = int(os.environ.get("CLAUDE_CODE_TIMEOUT", "240"))
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=timeout_s,
+            )
         except subprocess.TimeoutExpired:
-            raise RuntimeError("Claude Code CLI timed out after 120s")
+            raise RuntimeError(f"Claude Code CLI timed out after {timeout_s}s")
         if result.returncode != 0:
             raise RuntimeError(f"Claude Code CLI failed: {result.stderr[:200]}")
 

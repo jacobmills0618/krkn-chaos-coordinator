@@ -74,6 +74,7 @@ class ScenarioMatch:
     matched_scenario: str | None = None
     matched_repo: str | None = None
     similarity_score: float = 0.0
+    filter_injection_method: str | None = None  # from FILTER; free-text hint for ACT
 
 
 @dataclass(frozen=True)
@@ -86,6 +87,7 @@ class GapAnalysis:
     reasoning: str = ""
     base_scenario: str | None = None
     krkn_plugin: str | None = None  # from ANALYZE; plugin dir or scenario_plugins path
+    filter_injection_method: str | None = None  # from FILTER when MAP/ANALYZE lack plugin
     modifications: list[str] = field(default_factory=list)
 
 
