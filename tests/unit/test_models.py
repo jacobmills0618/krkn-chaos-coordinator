@@ -52,6 +52,13 @@ def test_gap_analysis_defaults():
     assert gap.confidence_score == 0
     assert gap.confidence_level == Confidence.LOW
     assert gap.action_type == ActionType.GITHUB_ISSUE
+    from src.models import FactorConfidence
+    assert gap.reproduction_confidence == FactorConfidence.LOW
+    assert gap.scenario_confidence == FactorConfidence.LOW
+    assert gap.understanding_confidence == FactorConfidence.LOW
+    assert gap.plugin_confidence == FactorConfidence.LOW
+    assert gap.domain_confidence == FactorConfidence.LOW
+    assert gap.history_confidence == FactorConfidence.LOW
 
 
 def test_agent_result_empty():

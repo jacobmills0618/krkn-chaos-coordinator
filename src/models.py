@@ -19,6 +19,12 @@ class Confidence(Enum):
     LOW = "low"        # 0-39: GitHub issue describing gap
 
 
+class FactorConfidence(Enum):
+    """Per-category score contribution: HIGH = points awarded, LOW = none."""
+    HIGH = "high"
+    LOW = "low"
+
+
 class ActionType(Enum):
     DRAFT_PR = "draft_pr"
     GITHUB_ISSUE = "github_issue"
@@ -93,6 +99,36 @@ class GapAnalysis:
     krkn_plugin: str | None = None  # from ANALYZE; plugin dir or scenario_plugins path
     filter_injection_method: str | None = None  # from FILTER when MAP/ANALYZE lack plugin
     modifications: list[str] = field(default_factory=list)
+    # Per-category confidence (HIGH = that scoring guide item awarded points)
+    reproduction_confidence: FactorConfidence = FactorConfidence.LOW
+    scenario_confidence: FactorConfidence = FactorConfidence.LOW
+    understanding_confidence: FactorConfidence = FactorConfidence.LOW
+    plugin_confidence: FactorConfidence = FactorConfidence.LOW
+    domain_confidence: FactorConfidence = FactorConfidence.LOW
+    history_confidence: FactorConfidence = FactorConfidence.LOW
+    # Optional per-factor notes: ((field_name, reason), ...)
+    confidence_factor_reasons: tuple[tuple[str, str], ...] = ()
+
+
+# Display labels for issue bodies / UI (field name → human label)
+CONFIDENCE_FACTOR_LABELS: tuple[tuple[str, str], ...] = (
+    ("reproduction_confidence", "Reproduction Confidence"),
+    ("scenario_confidence", "Scenario Confidence"),
+    ("understanding_confidence", "Understanding Confidence"),
+    ("plugin_confidence", "Plugin Confidence"),
+    ("domain_confidence", "Domain Confidence"),
+    ("history_confidence", "History Confidence"),
+)
+
+# Default LOW explanations when no specific reason was recorded
+CONFIDENCE_FACTOR_LOW_DEFAULTS: dict[str, str] = {
+    "reproduction_confidence": "Reproduction steps not clear enough (+0)",
+    "scenario_confidence": "No existing scenario to extend (+0)",
+    "understanding_confidence": "Failure mechanism not clear from docs (+0)",
+    "plugin_confidence": "No matching krkn plugin identified (+0)",
+    "domain_confidence": "Does not clearly match the agent domain (+0)",
+    "history_confidence": "No similar resolved bug found (+0)",
+}
 
 
 @dataclass(frozen=True)

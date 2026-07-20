@@ -8,7 +8,7 @@ from src.agents.act import (
     _plugin_from_base_scenario,
     _plugin_path,
 )
-from src.models import ActionType, Bug, Confidence, GapAnalysis
+from src.models import ActionType, Bug, Confidence, FactorConfidence, GapAnalysis
 
 
 def _bug(summary: str, description: str = "") -> Bug:
@@ -142,6 +142,39 @@ class TestResolveInjectionMethod:
         assert not base_scenario_matches_plugin(
             "scenarios/openshift/container_ovn.yml", _plugin_path("hogs")
         )
+
+    def test_issue_body_includes_confidence_factor_fields(self):
+        gap = _gap(
+            bug=_bug("network partition"),
+            krkn_plugin="network_chaos",
+            reproduction_confidence=FactorConfidence.HIGH,
+            scenario_confidence=FactorConfidence.LOW,
+            understanding_confidence=FactorConfidence.HIGH,
+            plugin_confidence=FactorConfidence.HIGH,
+            domain_confidence=FactorConfidence.LOW,
+            history_confidence=FactorConfidence.LOW,
+            confidence_factor_reasons=(
+                ("reproduction_confidence", "Clear PF shutdown + pod create steps (+20)"),
+                ("scenario_confidence", "No existing scenario to extend (+0)"),
+                ("understanding_confidence", "SR-IOV operator drain on PF down (+20)"),
+                ("plugin_confidence", "network_chaos injects link failure (+15)"),
+                ("domain_confidence", "Does not clearly match the agent domain (+0)"),
+                ("history_confidence", "No similar resolved bug found (+0)"),
+            ),
+        )
+        body = build_issue_body(gap, "networking")
+        assert "| **Reproduction Confidence** | HIGH |" in body
+        assert "| **Scenario Confidence** | LOW |" in body
+        assert "| **Understanding Confidence** | HIGH |" in body
+        assert "| **Plugin Confidence** | HIGH |" in body
+        assert "| **Domain Confidence** | LOW |" in body
+        assert "| **History Confidence** | LOW |" in body
+        assert (
+            "**Reproduction Confidence:** HIGH — Clear PF shutdown + pod create steps (+20)"
+            in body
+        )
+        assert "**Scenario Confidence:** LOW — No existing scenario to extend (+0)" in body
+
 
 
 class TestPluginFromBaseScenario:

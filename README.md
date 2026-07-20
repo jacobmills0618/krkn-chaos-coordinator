@@ -33,6 +33,25 @@ DISCOVER → FILTER → MAP → ANALYZE → ACT → REMEMBER
 | **ACT** | Create GitHub issues or draft PRs based on confidence |
 | **REMEMBER** | Store in Neo4j — never re-analyze the same bug |
 
+### Confidence scoring
+
+ANALYZE scores each gap 0–100. The overall band drives ACT; each scoring category is also recorded as **HIGH** (points awarded) or **LOW** (none) on the gap and in GitHub issue bodies.
+
+| Score | Level | Action |
+|:------|:------|:-------|
+| 70–100 | HIGH | Draft PRs across krkn + krkn-hub + website |
+| 40–69 | MEDIUM | GitHub issue with recommendation |
+| 0–39 | LOW | GitHub issue describing the gap |
+
+| Category field | Issue label | Points |
+|:---------------|:------------|:-------|
+| `reproduction_confidence` | Reproduction Confidence | +20 if exact repro steps are clear |
+| `scenario_confidence` | Scenario Confidence | +25 if an existing scenario can be extended |
+| `understanding_confidence` | Understanding Confidence | +20 if docs explain how the component fails |
+| `plugin_confidence` | Plugin Confidence | +15 if a krkn plugin injects this failure |
+| `domain_confidence` | Domain Confidence | +10 if the bug matches the agent's domain |
+| `history_confidence` | History Confidence | +10 if a similar bug was solved before |
+
 ## Agents
 
 ```
