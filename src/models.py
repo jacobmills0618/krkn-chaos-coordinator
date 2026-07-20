@@ -85,6 +85,7 @@ class GapAnalysis:
     action_type: ActionType = ActionType.GITHUB_ISSUE
     reasoning: str = ""
     base_scenario: str | None = None
+    krkn_plugin: str | None = None  # from ANALYZE; plugin dir or scenario_plugins path
     modifications: list[str] = field(default_factory=list)
 
 

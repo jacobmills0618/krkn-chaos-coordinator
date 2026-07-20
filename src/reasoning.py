@@ -218,7 +218,7 @@ Respond with ONLY a JSON object:
   "confidence_score": 0-100,
   "reasoning": "Detailed explanation of the score breakdown and analysis",
   "modifications": ["specific step 1", "specific step 2", ...],
-  "krkn_plugin": "exact plugin name" or null,
+  "krkn_plugin": "plugin directory under krkn/scenario_plugins/ (e.g. network_chaos, hogs, node_actions)" or null,
   "repos_to_update": ["krkn", "krkn-hub", "website"]
 }"""
 
@@ -310,11 +310,17 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
 
         score = min(100, max(0, int(result.get("confidence_score", 0))))
 
+        krkn_plugin = result.get("krkn_plugin") or None
+        if isinstance(krkn_plugin, str):
+            krkn_plugin = krkn_plugin.strip() or None
+        else:
+            krkn_plugin = None
+
         reasoning_parts = []
         if result.get("reasoning"):
             reasoning_parts.append(result["reasoning"])
-        if result.get("krkn_plugin"):
-            reasoning_parts.append(f"krkn plugin: {result['krkn_plugin']}")
+        if krkn_plugin:
+            reasoning_parts.append(f"krkn plugin: {krkn_plugin}")
         if result.get("repos_to_update"):
             reasoning_parts.append(f"Repos: {', '.join(result['repos_to_update'])}")
         reasoning = "; ".join(reasoning_parts)
@@ -340,6 +346,7 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
             action_type=action,
             reasoning=reasoning,
             base_scenario=match.matched_scenario,
+            krkn_plugin=krkn_plugin,
             modifications=modifications,
         )
 

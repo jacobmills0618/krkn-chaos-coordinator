@@ -1,6 +1,8 @@
 """ACT phase — create GitHub issues or draft PRs for identified gaps."""
 
 import logging
+import os
+from pathlib import Path
 
 from src.apis.github_client import GitHubClient
 from src.knowledge.scenario_index import scenario_github_url
@@ -99,6 +101,11 @@ PLUGIN_REGISTRY: dict[str, str] = {
     "zone_outage": "zone_outages_scenarios",
 }
 
+# Reverse map: config.yaml scenario_type → plugin directory
+_SCENARIO_TYPE_TO_PLUGIN: dict[str, str] = {
+    scenario_type: plugin_dir
+    for plugin_dir, scenario_type in PLUGIN_REGISTRY.items()
+}
 
 def _plugin_path(plugin_dir: str) -> str:
     return f"krkn/scenario_plugins/{plugin_dir}/"
@@ -113,6 +120,176 @@ def _scenario_type_from_plugin(plugin: str) -> str:
     if " (" in plugin and plugin.endswith(")"):
         return plugin.split(" (", 1)[1].rstrip(")")
     return PLUGIN_REGISTRY.get(plugin, "pod_disruption_scenarios")
+
+
+def normalize_krkn_plugin(value: str | None) -> str | None:
+    """Normalize ANALYZE / free-text plugin names to ``krkn/scenario_plugins/<dir>/``."""
+    if not value:
+        return None
+    raw = value.strip().strip("`").strip()
+    if not raw:
+        return None
+
+    if raw.startswith("krkn/scenario_plugins/"):
+        plugin_dir = raw.removeprefix("krkn/scenario_plugins/").strip("/")
+        if plugin_dir in PLUGIN_REGISTRY:
+            return _plugin_path(plugin_dir)
+        # keep first path segment if nested
+        plugin_dir = plugin_dir.split("/")[0]
+        if plugin_dir in PLUGIN_REGISTRY:
+            return _plugin_path(plugin_dir)
+        return None
+
+    # Exact plugin dir or scenario type
+    if raw in PLUGIN_REGISTRY:
+        return _plugin_path(raw)
+    if raw in _SCENARIO_TYPE_TO_PLUGIN:
+        return _plugin_path(_SCENARIO_TYPE_TO_PLUGIN[raw])
+
+    # Common LLM variants: "hogs (hog_scenarios)", "cpu_hog_scenarios", "network-chaos"
+    lowered = raw.lower().replace("-", "_")
+    for plugin_dir, scenario_type in PLUGIN_REGISTRY.items():
+        if lowered in {plugin_dir, scenario_type, scenario_type.replace("_scenarios", "")}:
+            return _plugin_path(plugin_dir)
+        if plugin_dir in lowered or scenario_type in lowered:
+            return _plugin_path(plugin_dir)
+
+    return None
+
+
+def _plugin_from_base_scenario(base_scenario: str) -> str | None:
+    """Derive plugin path from a MAP ``base_scenario`` file path."""
+    rel = base_scenario.replace("\\", "/")
+    stem = Path(rel).stem.lower().replace("-", "_")
+    path_l = rel.lower()
+
+    # Prefer scenario index when local krkn is available
+    try:
+        krkn_path = Path(os.environ.get("KRKN_REPO_PATH", str(Path.home() / "krkn")))
+        if krkn_path.exists():
+            from src.knowledge.scenario_index import index_scenarios_from_repo
+
+            for info in index_scenarios_from_repo(krkn_path):
+                if info.file_path == rel or info.file_path.endswith(rel):
+                    plugin = normalize_krkn_plugin(info.plugin_name) or normalize_krkn_plugin(
+                        info.scenario_type
+                    )
+                    if plugin:
+                        return plugin
+                    mapped = _SCENARIO_TYPE_TO_PLUGIN.get(info.scenario_type)
+                    if mapped:
+                        return _plugin_path(mapped)
+    except Exception as e:
+        logger.debug("base_scenario index lookup failed: %s", e)
+
+    # Path / filename heuristics (no YAML parse)
+    for plugin_dir in PLUGIN_REGISTRY:
+        token = plugin_dir.replace("_", "")
+        if plugin_dir in path_l or plugin_dir.replace("_", "-") in path_l:
+            return _plugin_path(plugin_dir)
+        if token and token in stem.replace("_", ""):
+            return _plugin_path(plugin_dir)
+
+    if "hog" in stem:
+        return _plugin_path("hogs")
+    if "kubevirt" in path_l or "vm_outage" in stem or "vm-outage" in path_l:
+        return _plugin_path("kubevirt_vm_outage")
+    if "network" in stem:
+        return _plugin_path("network_chaos")
+    if any(t in stem for t in ("etcd", "pod", "kill")):
+        return _plugin_path("pod_disruption")
+    if "node" in stem:
+        return _plugin_path("node_actions")
+    if "pvc" in stem or "storage" in stem:
+        return _plugin_path("pvc" if "pvc" in stem else "storage_throttle")
+
+    return None
+
+
+def _hint_for_plugin(plugin: str, base_scenario: str | None) -> str:
+    """Short configuration hint when plugin came from MAP/ANALYZE."""
+    scenario_type = _scenario_type_from_plugin(plugin)
+    if base_scenario:
+        return (
+            f"Start from `{base_scenario}` (scenario type `{scenario_type}`). "
+            "Adapt selectors/namespace for this bug's component, then register in "
+            "`config/config.yaml` if adding a new file."
+        )
+    return (
+        f"Author or extend a scenario under `{scenario_type}` using plugin `{plugin}`. "
+        "Match label selectors to the bug's component namespace."
+    )
+
+
+def _method_for_plugin(plugin: str) -> str:
+    plugin_dir = plugin.removeprefix("krkn/scenario_plugins/").strip("/")
+    labels = {
+        "hogs": "Create resource pressure (CPU/memory/IO hog) and verify component health",
+        "network_chaos": "Inject network latency, loss, or partition against target pods",
+        "network_chaos_ng": "Apply pod-level network filters (latency, loss, bandwidth)",
+        "node_actions": "Disrupt or recreate a node and verify cluster recovery",
+        "pod_disruption": "Disrupt component pods and verify recovery",
+        "container": "Kill or disrupt a specific container within a pod",
+        "kubevirt_vm_outage": "Disrupt a KubeVirt VM and verify recovery",
+        "application_outage": "Block ingress/egress to application routes",
+        "pvc": "Fill or stress a PVC to test out-of-disk handling",
+        "storage_throttle": "Throttle storage I/O to simulate degraded disk performance",
+    }
+    return labels.get(plugin_dir, f"Use the `{plugin_dir}` krkn plugin to inject the failure mode")
+
+
+def resolve_injection_method(
+    gap: GapAnalysis,
+) -> tuple[str, str, str, str]:
+    """Pick injection method for issue/PR text.
+
+    Preference order:
+      1. ``gap.krkn_plugin`` from ANALYZE
+      2. Plugin derived from MAP ``gap.base_scenario``
+      3. Keyword ``_infer_injection_method`` (labeled fallback / default)
+
+    Returns (method_description, plugin_path, config_hint, source_label).
+    """
+    analyzed = normalize_krkn_plugin(gap.krkn_plugin)
+    if analyzed:
+        return (
+            _method_for_plugin(analyzed),
+            analyzed,
+            _hint_for_plugin(analyzed, gap.base_scenario),
+            "ANALYZE (gap.krkn_plugin)",
+        )
+
+    if gap.base_scenario:
+        mapped = _plugin_from_base_scenario(gap.base_scenario)
+        if mapped:
+            return (
+                _method_for_plugin(mapped),
+                mapped,
+                _hint_for_plugin(mapped, gap.base_scenario),
+                f"MAP match ({gap.base_scenario})",
+            )
+
+    method_desc, plugin, config_hint = _infer_injection_method(gap)
+    summary = gap.bug.summary.lower()
+    desc = (gap.bug.description or "").lower()
+    text = f"{summary} {desc}"
+    source = "keyword heuristic"
+    if plugin.rstrip("/").endswith("pod_disruption"):
+        intentional = any(
+            kw in text
+            for kw in ("etcd", "quorum", "leader", "upgrade", "rollback", "duplicate member")
+        )
+        if not intentional:
+            source = "keyword default (low confidence — review before implementing)"
+            config_hint = (
+                f"{config_hint} "
+                "**Note:** No MAP/ANALYZE plugin was available; pod_disruption is the "
+                "generic fallback, not a high-confidence match for this bug."
+            )
+        else:
+            source = "keyword heuristic (pod_disruption for etcd/upgrade-style failure)"
+
+    return method_desc, plugin, config_hint, source
 
 
 def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
@@ -264,7 +441,7 @@ def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
 def _build_next_steps(gap: GapAnalysis) -> list[str]:
     """Build concrete next steps for the issue."""
     steps = []
-    method_desc, plugin, config_hint = _infer_injection_method(gap)
+    method_desc, plugin, config_hint, _source = resolve_injection_method(gap)
 
     if gap.base_scenario and gap.action_type == ActionType.DRAFT_PR:
         steps.append(f"Review the existing scenario at `{gap.base_scenario}` and understand its current configuration")
@@ -303,7 +480,7 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     """Build a detailed GitHub issue body with actionable next steps."""
     lines = []
     failure_mode = _infer_failure_mode(gap)
-    method_desc, plugin, config_hint = _infer_injection_method(gap)
+    method_desc, plugin, config_hint, plugin_source = resolve_injection_method(gap)
 
     # Header
     lines.append("## Chaos Test Coverage Gap")
@@ -342,6 +519,8 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     lines.append(f"**Injection method:** {method_desc}")
     lines.append("")
     lines.append(f"**krkn plugin:** `{plugin}`")
+    lines.append("")
+    lines.append(f"**Plugin source:** {plugin_source}")
     lines.append("")
     lines.append(f"**Configuration:** {config_hint}")
     lines.append("")
