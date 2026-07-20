@@ -343,3 +343,55 @@ class TestLlmAnalyzeGap:
 
         assert gap.confidence_score <= 100
         assert gap.krkn_plugin == "pod_disruption"
+
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
+    @patch("src.reasoning.call_llm")
+    def test_analyze_prompt_includes_scenario_hits_kb_and_yaml(self, mock_llm, mock_catalog):
+        mock_catalog.return_value = {
+            "plugins": ["pod_disruption", "hogs"],
+            "scenarios": ["scenarios/openshift/etcd.yml"],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
+        mock_llm.return_value = json.dumps({
+            "confidence_score": 50,
+            "reasoning": "Reuse etcd kill with namespace tweak",
+            "modifications": ["target openshift-etcd"],
+            "krkn_plugin": "pod_disruption",
+            "repos_to_update": ["krkn"],
+        })
+
+        bug = _make_bug(summary="etcd member loss", description="x" * 250)
+        match = ScenarioMatch(
+            bug=bug,
+            match_result=MatchResult.PARTIAL_MATCH,
+            matched_scenario="scenarios/openshift/etcd.yml",
+        )
+        llm_analyze_gap(
+            bug,
+            match,
+            ocp_docs=[{"text": "etcd is the control plane store"}],
+            krkn_docs=[{"text": "pod disruption kills pods"}],
+            neo4j_history=[],
+            scenario_hits=[{
+                "path": "scenarios/openshift/etcd.yml",
+                "distance": 0.42,
+                "text": "pod_scenarios for etcd",
+            }],
+            kb_context={
+                "scenario_name": "pod-disruption",
+                "title": "Pod Disruption",
+                "description": "Kill pods by label",
+                "parameters": ["namespace", "label_selector"],
+            },
+            matched_scenario_yaml="- pod_scenarios:\n    namespace: openshift-etcd\n",
+        )
+
+        prompt = mock_llm.call_args.kwargs["messages"][0]["content"]
+        assert "Scenario search hits" in prompt
+        assert "scenarios/openshift/etcd.yml" in prompt
+        assert "pod_scenarios for etcd" in prompt
+        assert "Knowledgebase match" in prompt
+        assert "pod-disruption" in prompt
+        assert "Matched scenario YAML" in prompt
+        assert "namespace: openshift-etcd" in prompt

@@ -343,6 +343,10 @@ def llm_analyze_gap(
     krkn_docs: list[dict],
     neo4j_history: list[dict],
     config: LLMBackendConfig | None = None,
+    *,
+    scenario_hits: list[dict] | None = None,
+    kb_context: dict | None = None,
+    matched_scenario_yaml: str | None = None,
 ) -> GapAnalysis:
     """Use LLM to analyze a coverage gap and produce specific recommendations.
 
@@ -353,6 +357,9 @@ def llm_analyze_gap(
         krkn_docs: ChromaDB krkn doc search results for available plugins.
         neo4j_history: Similar resolved bugs from Neo4j.
         config: LLM backend config. Auto-detected if None.
+        scenario_hits: MAP + dedicated scenarios-collection search hits.
+        kb_context: Forwarded MAP knowledgebase match (name/title/params).
+        matched_scenario_yaml: Raw YAML for ``match.matched_scenario``.
 
     Returns:
         GapAnalysis with LLM-generated confidence score, reasoning, and modifications.
@@ -370,11 +377,11 @@ def llm_analyze_gap(
     catalog_block = format_krkn_catalog_for_prompt(catalog)
 
     ocp_context = "\n---\n".join(
-        hit["text"][:400] for hit in ocp_docs[:3]
+        hit["text"][:500] for hit in ocp_docs[:3]
     ) or "No OCP documentation found."
 
     krkn_context = "\n---\n".join(
-        hit["text"][:400] for hit in krkn_docs[:3]
+        hit["text"][:500] for hit in krkn_docs[:3]
     ) or "No krkn plugin documentation found."
 
     history_context = "\n".join(
@@ -382,7 +389,46 @@ def llm_analyze_gap(
         for h in neo4j_history[:5]
     ) or "No similar resolved bugs found."
 
-    scenario_context = f"Closest scenario: {match.matched_scenario}" if match.matched_scenario else "No matching scenario found."
+    scenario_context = (
+        f"Closest scenario: {match.matched_scenario}"
+        if match.matched_scenario
+        else "No matching scenario found."
+    )
+
+    hits = scenario_hits if scenario_hits is not None else list(match.map_scenario_hits)
+    if hits:
+        hit_lines = []
+        for hit in hits[:5]:
+            path = (
+                hit.get("path")
+                or hit.get("metadata", {}).get("path")
+                or hit.get("id")
+                or "?"
+            )
+            dist = hit.get("distance")
+            dist_s = f" (distance={dist:.3f})" if isinstance(dist, (int, float)) else ""
+            snippet = (hit.get("text") or "")[:500]
+            hit_lines.append(f"- {path}{dist_s}\n  {snippet}")
+        scenario_hits_block = "\n".join(hit_lines)
+    else:
+        scenario_hits_block = "No scenario search hits."
+
+    if kb_context is None:
+        kb_context = match.kb_context
+    if kb_context:
+        kb_block = (
+            f"name={kb_context.get('scenario_name')}; "
+            f"title={kb_context.get('title')}; "
+            f"params={kb_context.get('parameters')}; "
+            f"desc={kb_context.get('description')}"
+        )
+    else:
+        kb_block = "No knowledgebase match."
+
+    if matched_scenario_yaml:
+        yaml_block = matched_scenario_yaml
+    else:
+        yaml_block = "No matched scenario YAML available."
 
     if bug.fixed_in_release:
         commit_detail = ""
@@ -402,6 +448,15 @@ Description: {bug.description[:1000] if bug.description else 'No description'}
 Match result: {match.match_result.value}
 {scenario_context}
 
+Scenario search hits (MAP + dedicated scenarios collection):
+{scenario_hits_block}
+
+Knowledgebase match (from MAP):
+{kb_block}
+
+Matched scenario YAML (from disk):
+{yaml_block}
+
 Live krkn repository catalog (do not invent plugins):
 {catalog_block}
 
@@ -415,6 +470,7 @@ Previously Resolved Similar Bugs:
 {history_context}
 
 Analyze this gap. Score confidence and provide SPECIFIC modifications.
+Use the scenario hits and YAML above to decide reuse vs new scenario.
 Pick krkn_plugin from the live catalog above."""
 
     try:

@@ -162,6 +162,43 @@ def format_krkn_catalog_for_prompt(catalog: dict | None = None) -> str:
     return "\n".join(lines)
 
 
+def read_scenario_yaml(
+    relative_path: str | None,
+    krkn_repo_path: Path | None = None,
+    *,
+    max_chars: int = 3000,
+) -> str | None:
+    """Read a scenario YAML from the local krkn clone for ANALYZE context.
+
+    Restricts reads to files under the krkn repo root. Returns None if the
+    path is missing, outside the repo, or unreadable.
+    """
+    import os
+
+    if not relative_path:
+        return None
+    path = krkn_repo_path or Path(
+        os.environ.get("KRKN_REPO_PATH", str(Path.home() / "krkn"))
+    )
+    rel = relative_path.replace("\\", "/").lstrip("./")
+    candidate = (path / rel).resolve()
+    try:
+        repo_root = path.resolve()
+        if repo_root not in candidate.parents and candidate != repo_root:
+            return None
+    except OSError:
+        return None
+    if not candidate.is_file():
+        return None
+    try:
+        text = candidate.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    if len(text) > max_chars:
+        return text[:max_chars] + "\n... (truncated)"
+    return text
+
+
 def _type_to_plugin(scenario_type: str) -> str:
     """Map a scenario type key to the plugin directory name."""
     return scenario_type.replace("_scenarios", "").replace("_scenario", "")

@@ -75,6 +75,10 @@ class ScenarioMatch:
     matched_repo: str | None = None
     similarity_score: float = 0.0
     filter_injection_method: str | None = None  # from FILTER; free-text hint for ACT
+    # MAP search artifacts forwarded to ANALYZE (avoid discarding paid Chroma/KB work)
+    map_scenario_hits: tuple[dict, ...] = ()
+    map_doc_hits: tuple[dict, ...] = ()
+    kb_context: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +135,9 @@ class AnalyzeContext:
     ocp_docs: tuple[dict, ...] = ()
     krkn_docs: tuple[dict, ...] = ()
     neo4j_history: tuple[dict, ...] = ()
+    scenario_hits: tuple[dict, ...] = ()  # MAP hits + dedicated scenarios search
+    kb_context: dict | None = None  # forwarded from MAP knowledgebase lookup
+    matched_scenario_yaml: str | None = None  # raw YAML for match.matched_scenario
 
 
 @dataclass
