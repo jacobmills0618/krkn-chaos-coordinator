@@ -136,3 +136,29 @@ class TestBuildKrknCatalog:
         catalog = build_krkn_catalog(tmp_path)
         assert catalog["source"] == "fallback"
         assert "pod_disruption" in catalog["plugins"]
+
+
+class TestReadScenarioYaml:
+    def test_reads_and_truncates(self, tmp_path):
+        scenarios_dir = tmp_path / "scenarios" / "openshift"
+        scenarios_dir.mkdir(parents=True)
+        content = "apiVersion: v1\n" + ("x" * 5000)
+        (scenarios_dir / "etcd.yml").write_text(content)
+
+        from src.knowledge.scenario_index import read_scenario_yaml
+
+        text = read_scenario_yaml("scenarios/openshift/etcd.yml", tmp_path, max_chars=100)
+        assert text is not None
+        assert text.startswith("apiVersion: v1")
+        assert text.endswith("... (truncated)")
+        assert len(text) < 200
+
+    def test_rejects_path_outside_repo(self, tmp_path):
+        from src.knowledge.scenario_index import read_scenario_yaml
+
+        assert read_scenario_yaml("../../etc/passwd", tmp_path) is None
+
+    def test_missing_file_returns_none(self, tmp_path):
+        from src.knowledge.scenario_index import read_scenario_yaml
+
+        assert read_scenario_yaml("scenarios/missing.yml", tmp_path) is None

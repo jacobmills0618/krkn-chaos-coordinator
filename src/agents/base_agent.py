@@ -38,6 +38,31 @@ from src.models import (
 logger = logging.getLogger(__name__)
 
 
+def _merge_scenario_hits(
+    map_hits: tuple[dict, ...] | list[dict],
+    analyze_hits: list[dict],
+    *,
+    limit: int = 8,
+) -> list[dict]:
+    """Prefer MAP scenario hits, then dedupe with ANALYZE scenarios search."""
+    merged: list[dict] = []
+    seen: set[str] = set()
+    for hit in list(map_hits) + list(analyze_hits):
+        key = (
+            hit.get("id")
+            or hit.get("path")
+            or hit.get("metadata", {}).get("path")
+            or (hit.get("text") or "")[:80]
+        )
+        if not key or key in seen:
+            continue
+        seen.add(str(key))
+        merged.append(hit)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
 class BaseDomainAgent(ABC):
     """Base class for domain-specific chaos coverage agents."""
 
@@ -362,15 +387,23 @@ class BaseDomainAgent(ABC):
             metrics.llm_map_calls += 1
             if obs.status == "error":
                 metrics.map_fallbacks += 1
-            return match, obs
+        else:
+            from src.reasoning import _fallback_match
+            from src.models import Observation
+            match = _fallback_match(bug, scenario_hits)
+            obs = Observation(
+                status="success",
+                summary=f"{bug.key}: distance-based match={match.match_result.value}",
+                next_actions=("proceed_to_analyze",) if match.match_result != MatchResult.FULL_MATCH else ("skip_full_match",),
+            )
 
-        from src.reasoning import _fallback_match
-        from src.models import Observation
-        match = _fallback_match(bug, scenario_hits)
-        obs = Observation(
-            status="success",
-            summary=f"{bug.key}: distance-based match={match.match_result.value}",
-            next_actions=("proceed_to_analyze",) if match.match_result != MatchResult.FULL_MATCH else ("skip_full_match",),
+        # Forward MAP search artifacts so ANALYZE does not discard paid Chroma/KB work
+        from dataclasses import replace
+        match = replace(
+            match,
+            map_scenario_hits=tuple(scenario_hits),
+            map_doc_hits=tuple(doc_hits),
+            kb_context=kb_context,
         )
         return match, obs
 
@@ -415,6 +448,13 @@ class BaseDomainAgent(ABC):
                 krkn_docs = self.chroma.search_per_component(
                     components, bug.summary, collection="krkn_docs", n_results=3,
                 )
+                # Dedicated scenarios search (ANALYZE previously only used mixed "all")
+                analyze_scenario_hits = self.chroma.search_per_component(
+                    components, bug.summary, collection="scenarios", n_results=5,
+                )
+                scenario_hits = _merge_scenario_hits(
+                    match.map_scenario_hits, analyze_scenario_hits, limit=8,
+                )
                 neo4j_history = []
                 try:
                     for comp in components:
@@ -422,10 +462,16 @@ class BaseDomainAgent(ABC):
                 except Exception as e:
                     logger.warning("Neo4j history lookup failed: %s", e)
 
+                from src.knowledge.scenario_index import read_scenario_yaml
+                matched_yaml = read_scenario_yaml(match.matched_scenario)
+
                 ctx = AnalyzeContext(
                     ocp_docs=tuple(ocp_docs),
                     krkn_docs=tuple(krkn_docs),
                     neo4j_history=tuple(neo4j_history),
+                    scenario_hits=tuple(scenario_hits),
+                    kb_context=match.kb_context,
+                    matched_scenario_yaml=matched_yaml,
                 )
                 gap, obs = analyze_gap_llm(bug, match, ctx)
                 metrics.llm_analyze_calls += 1

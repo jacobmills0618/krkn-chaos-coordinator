@@ -408,8 +408,10 @@ class TestAnalyzeGapLlm:
         )
 
         assert isinstance(result, GapAnalysis)
-        assert result.confidence_score == 0
+        # Failure gap keeps LOW; score is 20 when MAP left a base scenario
+        assert result.confidence_score == 20
         assert result.confidence_level == Confidence.LOW
+        assert result.base_scenario == "scenarios/openshift/etcd.yml"
         assert obs.status == "error"
         assert "log_gap_only" in obs.next_actions
         assert obs.artifacts["error"] == "Model overloaded"
