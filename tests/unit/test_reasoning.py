@@ -395,3 +395,102 @@ class TestLlmAnalyzeGap:
         assert "pod-disruption" in prompt
         assert "Matched scenario YAML" in prompt
         assert "namespace: openshift-etcd" in prompt
+
+
+class TestDeriveConfidenceFactors:
+    def test_fallback_style_high_when_points_earned(self):
+        from src.models import FactorConfidence
+        from src.reasoning import derive_confidence_factors
+
+        bug = _make_bug(
+            summary="etcd leader election fails",
+            description="x" * 250,
+        )
+        match = ScenarioMatch(
+            bug=bug,
+            match_result=MatchResult.PARTIAL_MATCH,
+            matched_scenario="scenarios/openshift/etcd.yml",
+        )
+        factors, reasons = derive_confidence_factors(
+            bug, match, krkn_plugin="pod_disruption", neo4j_history=[{"bug_key": "X"}],
+        )
+        assert factors["reproduction_confidence"] == FactorConfidence.HIGH
+        assert factors["scenario_confidence"] == FactorConfidence.HIGH
+        assert factors["understanding_confidence"] == FactorConfidence.HIGH
+        assert factors["plugin_confidence"] == FactorConfidence.HIGH
+        assert factors["history_confidence"] == FactorConfidence.HIGH
+        assert factors["domain_confidence"] == FactorConfidence.LOW
+        reason_map = dict(reasons)
+        assert "+20" in reason_map["reproduction_confidence"]
+        assert "etcd.yml" in reason_map["scenario_confidence"]
+
+    def test_llm_factors_override_derived(self):
+        from src.models import FactorConfidence
+        from src.reasoning import derive_confidence_factors
+
+        bug = _make_bug(summary="quiet issue", description="short")
+        match = ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH)
+        factors, reasons = derive_confidence_factors(
+            bug,
+            match,
+            llm_factors={
+                "reproduction": {"level": "high", "reason": "Detailed steps in description (+20)"},
+                "scenario": "low",
+                "understanding": "high",
+                "plugin": "low",
+                "domain": {"level": "high", "reason": "Matches networking agent (+10)"},
+                "history": "low",
+            },
+        )
+        assert factors["reproduction_confidence"] == FactorConfidence.HIGH
+        assert factors["domain_confidence"] == FactorConfidence.HIGH
+        assert factors["scenario_confidence"] == FactorConfidence.LOW
+        reason_map = dict(reasons)
+        assert reason_map["reproduction_confidence"] == "Detailed steps in description (+20)"
+        assert reason_map["domain_confidence"] == "Matches networking agent (+10)"
+
+    @patch("src.knowledge.scenario_index.build_krkn_catalog")
+    @patch("src.reasoning.call_llm")
+    def test_analyze_persists_llm_confidence_factors(self, mock_llm, mock_catalog):
+        from src.models import FactorConfidence
+
+        mock_catalog.return_value = {
+            "plugins": ["pod_disruption"],
+            "scenarios": [],
+            "source": "repo",
+            "repo_path": "/tmp/krkn",
+        }
+        mock_llm.return_value = json.dumps({
+            "confidence_score": 55,
+            "confidence_factors": {
+                "reproduction": {
+                    "level": "high",
+                    "reason": "Clear PF shutdown steps (+20)",
+                },
+                "scenario": {"level": "high", "reason": "Partial match etcd.yml (+25)"},
+                "understanding": {"level": "low", "reason": "Docs unclear (+0)"},
+                "plugin": {"level": "high", "reason": "pod_disruption fits (+15)"},
+                "domain": {"level": "high", "reason": "control_plane domain (+10)"},
+                "history": {"level": "low", "reason": "No prior art (+0)"},
+            },
+            "reasoning": "breakdown",
+            "modifications": ["add case"],
+            "krkn_plugin": "pod_disruption",
+            "repos_to_update": ["krkn"],
+        })
+        bug = _make_bug(summary="etcd crash", description="x" * 250)
+        match = ScenarioMatch(
+            bug=bug,
+            match_result=MatchResult.PARTIAL_MATCH,
+            matched_scenario="scenarios/openshift/etcd.yml",
+        )
+        gap = llm_analyze_gap(bug, match, [], [], [])
+        assert gap.reproduction_confidence == FactorConfidence.HIGH
+        assert gap.scenario_confidence == FactorConfidence.HIGH
+        assert gap.understanding_confidence == FactorConfidence.LOW
+        assert gap.plugin_confidence == FactorConfidence.HIGH
+        assert gap.domain_confidence == FactorConfidence.HIGH
+        assert gap.history_confidence == FactorConfidence.LOW
+        assert dict(gap.confidence_factor_reasons)["reproduction_confidence"] == (
+            "Clear PF shutdown steps (+20)"
+        )

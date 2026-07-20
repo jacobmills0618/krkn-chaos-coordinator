@@ -15,6 +15,7 @@ from src.filter.llm_filter import call_llm
 from src.models import (
     Bug,
     Confidence,
+    FactorConfidence,
     ActionType,
     FilterResult,
     GapAnalysis,
@@ -239,12 +240,17 @@ You are given:
 Your job: analyze the gap and produce a SPECIFIC recommendation for how to fill it.
 
 Scoring guide (0-100):
-- Can you explain exact reproduction steps? (+20)
-- Is there an existing scenario to extend? (+25)
-- Do you understand HOW the component fails from the docs? (+20)
-- Is there a krkn plugin that injects this exact failure? (+15)
-- Does this match the agent's domain? (+10)
-- Have we solved a similar bug before? (+10)
+- Can you explain exact reproduction steps? (+20) → reproduction
+- Is there an existing scenario to extend? (+25) → scenario
+- Do you understand HOW the component fails from the docs? (+20) → understanding
+- Is there a krkn plugin that injects this exact failure? (+15) → plugin
+- Does this match the agent's domain? (+10) → domain
+- Have we solved a similar bug before? (+10) → history
+
+For each scoring item, set the matching confidence_factors entry to an object with
+"level" ("high" if you awarded those points, else "low") and a short "reason"
+explaining why (include the +/- points). Example reason:
+"Clear PF shutdown + pod create steps (+20)".
 
 For modifications, be SPECIFIC:
 - BAD: "extend the etcd scenario"
@@ -253,6 +259,14 @@ For modifications, be SPECIFIC:
 Respond with ONLY a JSON object:
 {
   "confidence_score": 0-100,
+  "confidence_factors": {
+    "reproduction": {"level": "high" or "low", "reason": "short why (+N or +0)"},
+    "scenario": {"level": "high" or "low", "reason": "short why (+N or +0)"},
+    "understanding": {"level": "high" or "low", "reason": "short why (+N or +0)"},
+    "plugin": {"level": "high" or "low", "reason": "short why (+N or +0)"},
+    "domain": {"level": "high" or "low", "reason": "short why (+N or +0)"},
+    "history": {"level": "high" or "low", "reason": "short why (+N or +0)"}
+  },
   "reasoning": "Detailed explanation of the score breakdown and analysis",
   "modifications": ["specific step 1", "specific step 2", ...],
   "krkn_plugin": "plugin directory under krkn/scenario_plugins/ (e.g. network_chaos, hogs, node_actions)" or null,
@@ -261,6 +275,138 @@ Respond with ONLY a JSON object:
 
 If confidence_score >= 40, krkn_plugin MUST be a catalog plugin directory (never null).
 Only use null when confidence_score < 40."""
+
+
+_FAILURE_KEYWORDS = (
+    "timeout", "crash", "unavailable", "degraded", "unhealthy",
+    "not cleared", "failure", "failed", "outage", "disruption",
+    "quorum", "leader election", "not ready", "eviction",
+)
+
+
+def _factor_from_value(value: object) -> FactorConfidence:
+    if isinstance(value, FactorConfidence):
+        return value
+    if isinstance(value, dict):
+        return _factor_from_value(value.get("level") or value.get("value"))
+    if isinstance(value, str) and value.strip().lower() in ("high", "h"):
+        return FactorConfidence.HIGH
+    return FactorConfidence.LOW
+
+
+def _reason_from_value(value: object) -> str | None:
+    if isinstance(value, dict):
+        reason = value.get("reason") or value.get("why") or value.get("explanation")
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip()
+    return None
+
+
+_FACTOR_SHORT_KEYS = (
+    ("reproduction", "reproduction_confidence"),
+    ("scenario", "scenario_confidence"),
+    ("understanding", "understanding_confidence"),
+    ("plugin", "plugin_confidence"),
+    ("domain", "domain_confidence"),
+    ("history", "history_confidence"),
+)
+
+
+def derive_confidence_factors(
+    bug: Bug,
+    match: ScenarioMatch,
+    *,
+    krkn_plugin: str | None = None,
+    neo4j_history: list[dict] | None = None,
+    llm_factors: dict | None = None,
+    scenario_partial_only: bool = False,
+) -> tuple[dict[str, FactorConfidence], tuple[tuple[str, str], ...]]:
+    """Compute HIGH/LOW and reasons for each ANALYZE scoring category.
+
+    HIGH means that category contributed points; LOW means zero points.
+    When ``llm_factors`` is provided, those values win for keys the model set.
+
+    If ``scenario_partial_only`` is True (keyword fallback), scenario HIGH only
+    applies on PARTIAL_MATCH — not soft matched_scenario paths.
+    """
+    has_repro = bool(bug.description and len(bug.description) > 200)
+    if scenario_partial_only:
+        has_scenario = match.match_result == MatchResult.PARTIAL_MATCH
+    else:
+        has_scenario = (
+            match.match_result == MatchResult.PARTIAL_MATCH
+            or bool(match.matched_scenario)
+        )
+    has_understanding = any(kw in bug.summary.lower() for kw in _FAILURE_KEYWORDS)
+    has_plugin = bool(krkn_plugin)
+    has_history = bool(neo4j_history)
+
+    derived: dict[str, FactorConfidence] = {
+        "reproduction_confidence": (
+            FactorConfidence.HIGH if has_repro else FactorConfidence.LOW
+        ),
+        "scenario_confidence": (
+            FactorConfidence.HIGH if has_scenario else FactorConfidence.LOW
+        ),
+        "understanding_confidence": (
+            FactorConfidence.HIGH if has_understanding else FactorConfidence.LOW
+        ),
+        "plugin_confidence": (
+            FactorConfidence.HIGH if has_plugin else FactorConfidence.LOW
+        ),
+        # Domain is agent-specific; only the LLM (or explicit override) can mark HIGH
+        "domain_confidence": FactorConfidence.LOW,
+        "history_confidence": (
+            FactorConfidence.HIGH if has_history else FactorConfidence.LOW
+        ),
+    }
+
+    reasons: dict[str, str] = {
+        "reproduction_confidence": (
+            "Clear repro steps (+20)" if has_repro
+            else "Reproduction steps not clear enough (+0)"
+        ),
+        "scenario_confidence": (
+            (
+                f"Partial match: {match.matched_scenario} (+25)"
+                if match.matched_scenario
+                else "Existing scenario to extend (+25)"
+            )
+            if has_scenario
+            else "No existing scenario to extend (+0)"
+        ),
+        "understanding_confidence": (
+            "Known failure mode from bug summary (+20)" if has_understanding
+            else "Failure mechanism not clear from docs (+0)"
+        ),
+        "plugin_confidence": (
+            f"Plugin identified: {krkn_plugin} (+15)" if has_plugin
+            else "No matching krkn plugin identified (+0)"
+        ),
+        "domain_confidence": "Does not clearly match the agent domain (+0)",
+        "history_confidence": (
+            f"Similar resolved bugs found ({len(neo4j_history or [])}) (+10)"
+            if has_history
+            else "No similar resolved bug found (+0)"
+        ),
+    }
+
+    if llm_factors:
+        key_map = {short: field for short, field in _FACTOR_SHORT_KEYS}
+        key_map.update({field: field for _, field in _FACTOR_SHORT_KEYS})
+        for raw_key, field_name in key_map.items():
+            if raw_key not in llm_factors:
+                continue
+            raw_val = llm_factors[raw_key]
+            derived[field_name] = _factor_from_value(raw_val)
+            llm_reason = _reason_from_value(raw_val)
+            if llm_reason:
+                reasons[field_name] = llm_reason
+
+    reason_tuples = tuple(
+        (field, reasons[field]) for _, field in _FACTOR_SHORT_KEYS
+    )
+    return derived, reason_tuples
 
 
 def _validate_plugin_choice(raw: str | None, plugins: list[str]) -> str | None:
@@ -527,6 +673,14 @@ Pick krkn_plugin from the live catalog above."""
             confidence = Confidence.LOW
             action = ActionType.GITHUB_ISSUE
 
+        factors, factor_reasons = derive_confidence_factors(
+            bug,
+            match,
+            krkn_plugin=krkn_plugin,
+            neo4j_history=neo4j_history,
+            llm_factors=result.get("confidence_factors"),
+        )
+
         return finalize_gap_evidence(GapAnalysis(
             bug=bug,
             confidence_score=score,
@@ -537,6 +691,8 @@ Pick krkn_plugin from the live catalog above."""
             krkn_plugin=krkn_plugin,
             filter_injection_method=match.filter_injection_method,
             modifications=modifications,
+            confidence_factor_reasons=factor_reasons,
+            **factors,
         ))
 
     except (json.JSONDecodeError, KeyError) as e:
@@ -558,6 +714,7 @@ def _analyze_failure_gap(
     reasoning = f"LLM ANALYZE failed ({reason})"
     if plugin:
         reasoning = f"{reasoning}; compact plugin pick: {plugin}"
+    factors, factor_reasons = derive_confidence_factors(bug, match, krkn_plugin=plugin)
     return finalize_gap_evidence(GapAnalysis(
         bug=bug,
         confidence_score=20 if plugin or match.matched_scenario else 0,
@@ -567,6 +724,8 @@ def _analyze_failure_gap(
         base_scenario=match.matched_scenario,
         krkn_plugin=plugin,
         filter_injection_method=match.filter_injection_method,
+        confidence_factor_reasons=factor_reasons,
+        **factors,
     ))
 
 
@@ -583,12 +742,7 @@ def _fallback_analyze(bug: Bug, match: ScenarioMatch) -> GapAnalysis:
         score += 25
         reasoning_parts.append(f"Partial match: {match.matched_scenario} (+25)")
 
-    failure_keywords = [
-        "timeout", "crash", "unavailable", "degraded", "unhealthy",
-        "not cleared", "failure", "failed", "outage", "disruption",
-        "quorum", "leader election", "not ready", "eviction",
-    ]
-    if any(kw in bug.summary.lower() for kw in failure_keywords):
+    if any(kw in bug.summary.lower() for kw in _FAILURE_KEYWORDS):
         score += 20
         reasoning_parts.append("Known failure mode (+20)")
 
@@ -606,6 +760,11 @@ def _fallback_analyze(bug: Bug, match: ScenarioMatch) -> GapAnalysis:
     if match.matched_scenario:
         modifications.append(f"Extend {match.matched_scenario}")
 
+    # Fallback only awards repro / scenario / understanding points (no plugin/domain/history)
+    factors, factor_reasons = derive_confidence_factors(
+        bug, match, krkn_plugin=None, neo4j_history=None, scenario_partial_only=True,
+    )
+
     return finalize_gap_evidence(GapAnalysis(
         bug=bug,
         confidence_score=score,
@@ -615,4 +774,6 @@ def _fallback_analyze(bug: Bug, match: ScenarioMatch) -> GapAnalysis:
         base_scenario=match.matched_scenario,
         filter_injection_method=match.filter_injection_method,
         modifications=modifications,
+        confidence_factor_reasons=factor_reasons,
+        **factors,
     ))

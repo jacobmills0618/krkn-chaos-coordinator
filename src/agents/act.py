@@ -6,7 +6,7 @@ from pathlib import Path
 
 from src.apis.github_client import GitHubClient
 from src.knowledge.scenario_index import scenario_github_url
-from src.models import ActionType, GapAnalysis
+from src.models import ActionType, CONFIDENCE_FACTOR_LABELS, CONFIDENCE_FACTOR_LOW_DEFAULTS, GapAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -578,6 +578,9 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     lines.append(f"| **Component** | {gap.bug.component} |")
     lines.append(f"| **Priority** | {gap.bug.priority} |")
     lines.append(f"| **Confidence** | {gap.confidence_level.value.upper()} ({gap.confidence_score}/100) |")
+    for field_name, label in CONFIDENCE_FACTOR_LABELS:
+        level = getattr(gap, field_name).value.upper()
+        lines.append(f"| **{label}** | {level} |")
     lines.append(f"| **Action** | {'Draft PR recommended' if gap.action_type == ActionType.DRAFT_PR else 'Human review needed'} |")
     lines.append("")
 
@@ -643,13 +646,21 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
             )
         lines.append("")
 
-    # Confidence breakdown
+    # Confidence breakdown — one line per factor: label, HIGH/LOW, and why
     lines.append("### Confidence Breakdown")
     lines.append("")
     lines.append(f"Score: **{gap.confidence_score}/100** ({gap.confidence_level.value.upper()})")
     lines.append("")
-    for reason in gap.reasoning.split("; "):
-        lines.append(f"- {reason}")
+    reason_map = dict(gap.confidence_factor_reasons)
+    for field_name, label in CONFIDENCE_FACTOR_LABELS:
+        level = getattr(gap, field_name).value.upper()
+        why = reason_map.get(field_name) or CONFIDENCE_FACTOR_LOW_DEFAULTS.get(
+            field_name, ""
+        )
+        if why:
+            lines.append(f"- **{label}:** {level} — {why}")
+        else:
+            lines.append(f"- **{label}:** {level}")
     lines.append("")
 
     # Generated commands from knowledge base
