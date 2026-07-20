@@ -71,7 +71,95 @@ def index_plugins_from_repo(krkn_repo_path: Path) -> list[str]:
             plugins.append(item.name)
 
     logger.info("Found %d plugins: %s", len(plugins), plugins)
-    return plugins
+    return sorted(plugins)
+
+
+def list_scenario_files(krkn_repo_path: Path, limit: int = 60) -> list[str]:
+    """List relative paths of scenario YAML files under ``scenarios/``."""
+    scenarios_dir = krkn_repo_path / "scenarios"
+    if not scenarios_dir.exists():
+        return []
+
+    paths: list[str] = []
+    for yaml_file in sorted(scenarios_dir.rglob("*.y*ml")):
+        try:
+            paths.append(str(yaml_file.relative_to(krkn_repo_path)))
+        except ValueError:
+            continue
+        if len(paths) >= limit:
+            break
+    return paths
+
+
+def build_krkn_catalog(
+    krkn_repo_path: Path | None = None,
+    *,
+    max_scenarios: int = 50,
+) -> dict:
+    """Discover plugins + scenario files from a local krkn clone.
+
+    Looks at:
+      - ``{repo}/krkn/scenario_plugins/*`` (plugin directories)
+      - ``{repo}/scenarios/**/*.y*ml`` (example scenario configs)
+
+    Returns ``{"plugins": [...], "scenarios": [...], "source": "repo"|"fallback",
+    "repo_path": "..."}``.
+    """
+    import os
+
+    path = krkn_repo_path or Path(
+        os.environ.get("KRKN_REPO_PATH", str(Path.home() / "krkn"))
+    )
+    plugins = index_plugins_from_repo(path) if path.exists() else []
+    scenarios = list_scenario_files(path, limit=max_scenarios) if path.exists() else []
+
+    if plugins:
+        return {
+            "plugins": plugins,
+            "scenarios": scenarios,
+            "source": "repo",
+            "repo_path": str(path),
+        }
+
+    # Fallback when clone missing: static registry from ACT
+    try:
+        from src.agents.act import PLUGIN_REGISTRY
+
+        plugins = sorted(PLUGIN_REGISTRY.keys())
+    except Exception:
+        plugins = []
+
+    return {
+        "plugins": plugins,
+        "scenarios": scenarios,
+        "source": "fallback",
+        "repo_path": str(path),
+    }
+
+
+def format_krkn_catalog_for_prompt(catalog: dict | None = None) -> str:
+    """Render a compact catalog block for ANALYZE / compact-plugin prompts."""
+    catalog = catalog or build_krkn_catalog()
+    plugins = catalog.get("plugins") or []
+    scenarios = catalog.get("scenarios") or []
+    source = catalog.get("source", "unknown")
+    repo = catalog.get("repo_path", "")
+
+    lines = [
+        f"krkn catalog source: {source} ({repo})",
+        "Plugin directories under krkn/scenario_plugins/:",
+        ", ".join(plugins) if plugins else "(none found)",
+    ]
+    if scenarios:
+        lines.append("Example scenario files under scenarios/:")
+        # Keep prompt bounded
+        for rel in scenarios[:40]:
+            lines.append(f"  - {rel}")
+        if len(scenarios) > 40:
+            lines.append(f"  ... and {len(scenarios) - 40} more")
+    else:
+        lines.append("Example scenario files: (none indexed)")
+    return "\n".join(lines)
 
 
 def _type_to_plugin(scenario_type: str) -> str:

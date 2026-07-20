@@ -246,7 +246,8 @@ def resolve_injection_method(
     Preference order:
       1. ``gap.krkn_plugin`` from ANALYZE
       2. Plugin derived from MAP ``gap.base_scenario``
-      3. Keyword ``_infer_injection_method`` (labeled fallback / default)
+      3. Keyword inference guided by FILTER ``filter_injection_method``
+      4. Keyword ``_infer_injection_method`` (labeled fallback / default)
 
     Returns (method_description, plugin_path, config_hint, source_label).
     """
@@ -267,6 +268,34 @@ def resolve_injection_method(
                 mapped,
                 _hint_for_plugin(mapped, gap.base_scenario),
                 f"MAP match ({gap.base_scenario})",
+            )
+
+    if gap.filter_injection_method:
+        from dataclasses import replace
+
+        filter_gap = replace(
+            gap,
+            bug=replace(
+                gap.bug,
+                summary=f"{gap.filter_injection_method}: {gap.bug.summary}",
+            ),
+        )
+        method_desc, plugin, config_hint = _infer_injection_method(filter_gap)
+        # Prefer FILTER hint only when it moves off the generic pod_disruption default
+        # or when the filter text itself clearly names a disruption style.
+        intentional = any(
+            kw in gap.filter_injection_method.lower()
+            for kw in (
+                "network", "hog", "cpu", "memory", "node", "kubevirt", "vm",
+                "pvc", "storage", "time", "zone", "flood", "hijack", "container",
+            )
+        )
+        if intentional or not plugin.rstrip("/").endswith("pod_disruption"):
+            return (
+                method_desc,
+                plugin,
+                config_hint,
+                "FILTER injection_method",
             )
 
     method_desc, plugin, config_hint = _infer_injection_method(gap)

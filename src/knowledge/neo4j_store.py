@@ -220,9 +220,15 @@ class Neo4jStore:
                         g.action_type = $action_type,
                         g.reasoning = $reasoning,
                         g.base_scenario = $base_scenario,
+                        g.krkn_plugin = $krkn_plugin,
                         g.status = 'open',
                         g.opened_at = $ts,
                         g.agent = $agent
+                    ON MATCH SET g.krkn_plugin = coalesce($krkn_plugin, g.krkn_plugin),
+                        g.base_scenario = coalesce($base_scenario, g.base_scenario),
+                        g.confidence = $confidence,
+                        g.confidence_level = $level,
+                        g.reasoning = $reasoning
                     MERGE (b)-[:HAS_GAP]->(g)
                     RETURN g.opened_at = $ts AS is_new
                     """,
@@ -232,6 +238,7 @@ class Neo4jStore:
                     action_type=gap.action_type.value,
                     reasoning=gap.reasoning,
                     base_scenario=gap.base_scenario,
+                    krkn_plugin=gap.krkn_plugin,
                     ts=timestamp, agent=result.agent_name,
                 )
                 record = r.single()
@@ -376,6 +383,8 @@ class Neo4jStore:
                 MATCH (b:Bug)-[:HAS_GAP]->(g:Gap {status: 'open'})
                 RETURN b.key AS bug_key, b.summary AS summary,
                        g.confidence AS confidence, g.reasoning AS reasoning,
+                       g.base_scenario AS base_scenario,
+                       g.krkn_plugin AS krkn_plugin,
                        g.opened_at AS opened_at
                 ORDER BY g.confidence DESC
                 """

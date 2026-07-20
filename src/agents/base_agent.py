@@ -319,6 +319,12 @@ class BaseDomainAgent(ABC):
             match, obs = self._find_scenario_match(bug, filter_result, metrics)
             self._slog.log_phase("map", obs.status, obs.summary, bug_key=bug.key)
 
+            from dataclasses import replace
+            match = replace(
+                match,
+                filter_injection_method=filter_result.injection_method,
+            )
+
             if match.match_result == MatchResult.FULL_MATCH:
                 matched.append(match)
             else:
@@ -431,6 +437,12 @@ class BaseDomainAgent(ABC):
                 obs = Observation(
                     status="success",
                     summary=f"{bug.key}: keyword-based analysis, confidence={gap.confidence_score}",
+                )
+
+            from dataclasses import replace
+            if match.filter_injection_method and not gap.filter_injection_method:
+                gap = replace(
+                    gap, filter_injection_method=match.filter_injection_method,
                 )
 
             self._slog.log_phase("analyze", obs.status, obs.summary,

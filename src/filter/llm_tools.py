@@ -218,23 +218,20 @@ def analyze_gap_llm(
     except Exception as e:
         elapsed = time.monotonic() - start
         logger.warning("analyze_gap_llm failed for %s: %s", bug.key, e)
-        from src.models import ActionType, Confidence
+        from src.reasoning import _analyze_failure_gap
 
-        fallback = GapAnalysis(
-            bug=bug,
-            confidence_score=0,
-            confidence_level=Confidence.LOW,
-            action_type=ActionType.GITHUB_ISSUE,
-            reasoning=f"LLM analysis failed: {e}",
-            base_scenario=match.matched_scenario,
-        )
+        fallback = _analyze_failure_gap(bug, match, config, reason=str(e))
         obs = Observation(
             status="error",
-            summary=f"{bug.key}: LLM analyze failed: {e}",
+            summary=(
+                f"{bug.key}: LLM analyze failed (kept LOW, "
+                f"confidence={fallback.confidence_score}): {e}"
+            ),
             next_actions=("log_gap_only",),
             artifacts={
                 "bug_key": bug.key,
                 "error": str(e),
+                "confidence_score": fallback.confidence_score,
                 "elapsed": round(elapsed, 2),
             },
         )

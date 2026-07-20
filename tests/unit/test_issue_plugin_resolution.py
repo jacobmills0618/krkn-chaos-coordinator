@@ -83,6 +83,15 @@ class TestResolveInjectionMethod:
         assert "default" in source.lower()
         assert "fallback" in hint.lower()
 
+    def test_filter_injection_method(self):
+        gap = _gap(
+            bug=_bug("bridge server can crash"),
+            filter_injection_method="network partition between pods",
+        )
+        _method, plugin, _hint, source = resolve_injection_method(gap)
+        assert plugin == _plugin_path("network_chaos")
+        assert "FILTER" in source
+
     def test_issue_body_includes_plugin_source(self):
         gap = _gap(
             bug=_bug("network partition"),

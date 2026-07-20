@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 
 from src.filter.llm_config import LLMBackendConfig, detect_llm_backend
 from src.filter.llm_filter import call_llm
@@ -116,6 +117,7 @@ Relevant OCP/krkn documentation:
 
 Does any existing scenario cover this bug's exact failure mode?"""
 
+    injection = filter_result.injection_method
     try:
         text = call_llm(
             messages=[
@@ -141,20 +143,54 @@ Does any existing scenario cover this bug's exact failure mode?"""
             "PARTIAL_MATCH": MatchResult.PARTIAL_MATCH,
         }.get(match_str, MatchResult.NO_MATCH)
 
-        return ScenarioMatch(
+        match = ScenarioMatch(
             bug=bug,
             match_result=match_result,
             matched_scenario=matched_scenario,
             matched_repo="krkn-chaos/krkn" if matched_scenario else None,
             similarity_score=1.0 if match_result == MatchResult.FULL_MATCH else 0.5 if match_result == MatchResult.PARTIAL_MATCH else 0.0,
+            filter_injection_method=injection,
         )
+        return _with_soft_map_base(match, scenario_hits)
 
     except (json.JSONDecodeError, KeyError) as e:
         logger.warning("LLM MAP failed for %s (bad response), falling back: %s", bug.key, e)
-        return _fallback_match(bug, scenario_hits)
+        return replace(_fallback_match(bug, scenario_hits), filter_injection_method=injection)
     except Exception as e:
         logger.warning("LLM MAP failed for %s, falling back: %s", bug.key, e)
-        return _fallback_match(bug, scenario_hits)
+        return replace(_fallback_match(bug, scenario_hits), filter_injection_method=injection)
+
+
+def _scenario_path_from_hit(hit: dict) -> str | None:
+    text = hit.get("text") or ""
+    if "Scenario file:" in text:
+        return text.split("Scenario file:")[1].split("\n")[0].strip() or None
+    meta = hit.get("metadata") or {}
+    for key in ("source", "path", "file_path"):
+        val = meta.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _with_soft_map_base(match: ScenarioMatch, scenario_hits: list[dict]) -> ScenarioMatch:
+    """If MAP has no scenario, keep the top Chroma hit as a soft PARTIAL base."""
+    if match.matched_scenario and match.match_result != MatchResult.NO_MATCH:
+        return match
+    if not scenario_hits:
+        return match
+    path = _scenario_path_from_hit(scenario_hits[0])
+    dist = float(scenario_hits[0].get("distance", 1.0))
+    if not path or dist > 0.85:
+        return match
+    return ScenarioMatch(
+        bug=match.bug,
+        match_result=MatchResult.PARTIAL_MATCH,
+        matched_scenario=path,
+        matched_repo="krkn-chaos/krkn",
+        similarity_score=max(0.0, (1.0 - dist) * 0.5),
+        filter_injection_method=match.filter_injection_method,
+    )
 
 
 def _fallback_match(bug: Bug, scenario_hits: list[dict]) -> ScenarioMatch:
@@ -163,11 +199,7 @@ def _fallback_match(bug: Bug, scenario_hits: list[dict]) -> ScenarioMatch:
         return ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH)
 
     best_dist = scenario_hits[0].get("distance", 1.0)
-    best_text = scenario_hits[0].get("text", "")
-
-    scenario_path = None
-    if "Scenario file:" in best_text:
-        scenario_path = best_text.split("Scenario file:")[1].split("\n")[0].strip()
+    scenario_path = _scenario_path_from_hit(scenario_hits[0])
 
     if best_dist < 0.35 and scenario_path:
         return ScenarioMatch(
@@ -178,7 +210,7 @@ def _fallback_match(bug: Bug, scenario_hits: list[dict]) -> ScenarioMatch:
             similarity_score=1.0 - best_dist,
         )
 
-    if best_dist < 0.65:
+    if best_dist < 0.65 and scenario_path:
         return ScenarioMatch(
             bug=bug,
             match_result=MatchResult.PARTIAL_MATCH,
@@ -187,7 +219,11 @@ def _fallback_match(bug: Bug, scenario_hits: list[dict]) -> ScenarioMatch:
             similarity_score=1.0 - best_dist,
         )
 
-    return ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH)
+    # Soft base for ACT plugin derivation when distance is weak but a path exists
+    return _with_soft_map_base(
+        ScenarioMatch(bug=bug, match_result=MatchResult.NO_MATCH),
+        scenario_hits,
+    )
 
 
 ANALYZE_SYSTEM_PROMPT = """You are a chaos engineering expert for OpenShift/Kubernetes using the krkn chaos testing framework.
@@ -198,6 +234,7 @@ You are given:
 3. Relevant OCP architecture documentation
 4. Available krkn plugins and their capabilities
 5. Previously resolved similar bugs (from Neo4j history)
+6. A live catalog of plugin dirs / scenario files from the local krkn clone
 
 Your job: analyze the gap and produce a SPECIFIC recommendation for how to fill it.
 
@@ -220,7 +257,83 @@ Respond with ONLY a JSON object:
   "modifications": ["specific step 1", "specific step 2", ...],
   "krkn_plugin": "plugin directory under krkn/scenario_plugins/ (e.g. network_chaos, hogs, node_actions)" or null,
   "repos_to_update": ["krkn", "krkn-hub", "website"]
-}"""
+}
+
+If confidence_score >= 40, krkn_plugin MUST be a catalog plugin directory (never null).
+Only use null when confidence_score < 40."""
+
+
+def _validate_plugin_choice(raw: str | None, plugins: list[str]) -> str | None:
+    if not raw or not isinstance(raw, str):
+        return None
+    value = raw.strip().strip("`")
+    if value.startswith("krkn/scenario_plugins/"):
+        value = value.removeprefix("krkn/scenario_plugins/").strip("/")
+    value = value.split("/")[0]
+    if not plugins:
+        return value or None
+    if value in plugins:
+        return value
+    lowered = value.lower().replace("-", "_")
+    for d in plugins:
+        if d == lowered or d in lowered or lowered in d:
+            return d
+    return None
+
+
+def compact_pick_plugin(
+    bug: Bug,
+    match: ScenarioMatch,
+    config: LLMBackendConfig | None = None,
+) -> str | None:
+    """One-shot plugin pick from the local krkn catalog (ANALYZE follow-up)."""
+    if config is None:
+        config = detect_llm_backend(phase="analyze")
+    from src.knowledge.scenario_index import (
+        build_krkn_catalog,
+        format_krkn_catalog_for_prompt,
+    )
+
+    catalog = build_krkn_catalog()
+    plugins = list(catalog.get("plugins") or [])
+    if not plugins:
+        return None
+    catalog_block = format_krkn_catalog_for_prompt(catalog)
+    prompt = (
+        f"Bug: {bug.key}\nSummary: {bug.summary}\n"
+        f"Closest scenario: {match.matched_scenario or 'none'}\n\n"
+        f"{catalog_block}\n\n"
+        'Respond with ONLY JSON: {"krkn_plugin": "<catalog plugin dir>", "reasoning": "..."}'
+    )
+    try:
+        text = call_llm(
+            messages=[{"role": "user", "content": prompt}],
+            config=config,
+            system_prompt="Pick one plugin from the catalog. Do not invent names.",
+        )
+        if "```" in text:
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        return _validate_plugin_choice(json.loads(text).get("krkn_plugin"), plugins)
+    except Exception as e:
+        logger.warning("compact_pick_plugin failed for %s: %s", bug.key, e)
+        return None
+
+
+def finalize_gap_evidence(gap: GapAnalysis) -> GapAnalysis:
+    """Cap at 39/LOW when there is no plugin and no MAP base scenario."""
+    if gap.confidence_score < 40 or gap.krkn_plugin or gap.base_scenario:
+        return gap
+    note = "Score capped at 39: no krkn_plugin and no MAP base_scenario"
+    return replace(
+        gap,
+        confidence_score=39,
+        confidence_level=Confidence.LOW,
+        action_type=ActionType.GITHUB_ISSUE,
+        reasoning=f"{gap.reasoning}; {note}" if gap.reasoning else note,
+    )
 
 
 def llm_analyze_gap(
@@ -246,6 +359,15 @@ def llm_analyze_gap(
     """
     if config is None:
         config = detect_llm_backend(phase="analyze")
+
+    from src.knowledge.scenario_index import (
+        build_krkn_catalog,
+        format_krkn_catalog_for_prompt,
+    )
+
+    catalog = build_krkn_catalog()
+    plugins = list(catalog.get("plugins") or [])
+    catalog_block = format_krkn_catalog_for_prompt(catalog)
 
     ocp_context = "\n---\n".join(
         hit["text"][:400] for hit in ocp_docs[:3]
@@ -280,6 +402,9 @@ Description: {bug.description[:1000] if bug.description else 'No description'}
 Match result: {match.match_result.value}
 {scenario_context}
 
+Live krkn repository catalog (do not invent plugins):
+{catalog_block}
+
 OCP Architecture Documentation:
 {ocp_context}
 
@@ -289,16 +414,25 @@ Available krkn Plugins:
 Previously Resolved Similar Bugs:
 {history_context}
 
-Analyze this gap. Score confidence and provide SPECIFIC modifications."""
+Analyze this gap. Score confidence and provide SPECIFIC modifications.
+Pick krkn_plugin from the live catalog above."""
 
     try:
-        text = call_llm(
-            messages=[
-                {"role": "user", "content": prompt},
-            ],
-            config=config,
-            system_prompt=ANALYZE_SYSTEM_PROMPT,
-        )
+        try:
+            text = call_llm(
+                messages=[{"role": "user", "content": prompt}],
+                config=config,
+                system_prompt=ANALYZE_SYSTEM_PROMPT,
+            )
+        except Exception as e:
+            if "timed out" not in str(e).lower():
+                raise
+            logger.warning("ANALYZE timed out for %s — retrying once", bug.key)
+            text = call_llm(
+                messages=[{"role": "user", "content": prompt}],
+                config=config,
+                system_prompt=ANALYZE_SYSTEM_PROMPT,
+            )
 
         if "```" in text:
             text = text.split("```")[1]
@@ -310,11 +444,9 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
 
         score = min(100, max(0, int(result.get("confidence_score", 0))))
 
-        krkn_plugin = result.get("krkn_plugin") or None
-        if isinstance(krkn_plugin, str):
-            krkn_plugin = krkn_plugin.strip() or None
-        else:
-            krkn_plugin = None
+        krkn_plugin = _validate_plugin_choice(result.get("krkn_plugin"), plugins)
+        if score >= 40 and not krkn_plugin:
+            krkn_plugin = compact_pick_plugin(bug, match, config=config)
 
         reasoning_parts = []
         if result.get("reasoning"):
@@ -339,7 +471,7 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
             confidence = Confidence.LOW
             action = ActionType.GITHUB_ISSUE
 
-        return GapAnalysis(
+        return finalize_gap_evidence(GapAnalysis(
             bug=bug,
             confidence_score=score,
             confidence_level=confidence,
@@ -347,19 +479,43 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
             reasoning=reasoning,
             base_scenario=match.matched_scenario,
             krkn_plugin=krkn_plugin,
+            filter_injection_method=match.filter_injection_method,
             modifications=modifications,
-        )
+        ))
 
     except (json.JSONDecodeError, KeyError) as e:
-        logger.warning("LLM ANALYZE failed for %s (bad response), falling back: %s", bug.key, e)
-        return _fallback_analyze(bug, match)
+        logger.warning("LLM ANALYZE failed for %s (bad response), keeping LOW: %s", bug.key, e)
+        return _analyze_failure_gap(bug, match, config, f"bad LLM response: {e}")
     except Exception as e:
-        logger.warning("LLM ANALYZE failed for %s, falling back: %s", bug.key, e)
-        return _fallback_analyze(bug, match)
+        logger.warning("LLM ANALYZE failed for %s, keeping LOW: %s", bug.key, e)
+        return _analyze_failure_gap(bug, match, config, str(e))
+
+
+def _analyze_failure_gap(
+    bug: Bug,
+    match: ScenarioMatch,
+    config: LLMBackendConfig | None,
+    reason: str,
+) -> GapAnalysis:
+    """On LLM ANALYZE failure: stay LOW (no fake MEDIUM from keyword fallback)."""
+    plugin = compact_pick_plugin(bug, match, config=config)
+    reasoning = f"LLM ANALYZE failed ({reason})"
+    if plugin:
+        reasoning = f"{reasoning}; compact plugin pick: {plugin}"
+    return finalize_gap_evidence(GapAnalysis(
+        bug=bug,
+        confidence_score=20 if plugin or match.matched_scenario else 0,
+        confidence_level=Confidence.LOW,
+        action_type=ActionType.GITHUB_ISSUE,
+        reasoning=reasoning,
+        base_scenario=match.matched_scenario,
+        krkn_plugin=plugin,
+        filter_injection_method=match.filter_injection_method,
+    ))
 
 
 def _fallback_analyze(bug: Bug, match: ScenarioMatch) -> GapAnalysis:
-    """Keyword-based fallback when LLM is unavailable."""
+    """Keyword-based analysis when LLM is disabled (not used as LLM-failure substitute)."""
     score = 0
     reasoning_parts = []
 
@@ -394,12 +550,13 @@ def _fallback_analyze(bug: Bug, match: ScenarioMatch) -> GapAnalysis:
     if match.matched_scenario:
         modifications.append(f"Extend {match.matched_scenario}")
 
-    return GapAnalysis(
+    return finalize_gap_evidence(GapAnalysis(
         bug=bug,
         confidence_score=score,
         confidence_level=confidence,
         action_type=action,
         reasoning="; ".join(reasoning_parts),
         base_scenario=match.matched_scenario,
+        filter_injection_method=match.filter_injection_method,
         modifications=modifications,
-    )
+    ))
