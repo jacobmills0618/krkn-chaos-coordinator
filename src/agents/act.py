@@ -207,18 +207,76 @@ def _plugin_from_base_scenario(base_scenario: str) -> str | None:
 
 
 def _hint_for_plugin(plugin: str, base_scenario: str | None) -> str:
-    """Short configuration hint when plugin came from MAP/ANALYZE."""
+    """Short configuration hint when plugin came from MAP/ANALYZE.
+
+    Only treat ``base_scenario`` as a starter template when it belongs to the
+    same plugin. Otherwise describe the chosen plugin on its own and warn that
+    the MAP file is a different scenario type.
+    """
     scenario_type = _scenario_type_from_plugin(plugin)
-    if base_scenario:
+    plugin_dir = plugin.removeprefix("krkn/scenario_plugins/").strip("/")
+
+    if base_scenario and base_scenario_matches_plugin(base_scenario, plugin):
         return (
             f"Start from `{base_scenario}` (scenario type `{scenario_type}`). "
             "Adapt selectors/namespace for this bug's component, then register in "
             "`config/config.yaml` if adding a new file."
         )
+
+    example = _PLUGIN_EXAMPLE_SCENARIOS.get(plugin_dir)
+    example_bit = (
+        f" Use `{example}` as a shape reference for `{scenario_type}`."
+        if example
+        else ""
+    )
+    if base_scenario:
+        base_plugin = _plugin_from_base_scenario(base_scenario)
+        base_type = (
+            _scenario_type_from_plugin(base_plugin) if base_plugin else "unknown"
+        )
+        base_dir = (
+            base_plugin.removeprefix("krkn/scenario_plugins/").strip("/")
+            if base_plugin
+            else "unknown"
+        )
+        return (
+            f"Author or extend a scenario under `{scenario_type}` using plugin "
+            f"`{plugin}`.{example_bit} "
+            f"MAP closest file `{base_scenario}` is a **different** plugin "
+            f"(`{base_dir}` / `{base_type}`) — reuse namespace/selectors only; "
+            "do not copy it as the starter template for this plugin."
+        )
+
     return (
-        f"Author or extend a scenario under `{scenario_type}` using plugin `{plugin}`. "
+        f"Author or extend a scenario under `{scenario_type}` using plugin `{plugin}`."
+        f"{example_bit} "
         "Match label selectors to the bug's component namespace."
     )
+
+
+def base_scenario_matches_plugin(
+    base_scenario: str | None, plugin: str | None,
+) -> bool:
+    """True when MAP ``base_scenario`` is the same krkn plugin as ``plugin``."""
+    if not base_scenario or not plugin:
+        return False
+    mapped = _plugin_from_base_scenario(base_scenario)
+    if not mapped:
+        return False
+    return (
+        mapped.rstrip("/") == plugin.rstrip("/")
+        or normalize_krkn_plugin(mapped) == normalize_krkn_plugin(plugin)
+    )
+
+
+# Example YAML shapes when MAP base_scenario is the wrong plugin type
+_PLUGIN_EXAMPLE_SCENARIOS: dict[str, str] = {
+    "hogs": "scenarios/kube/cpu-hog.yml",
+    "container": "scenarios/openshift/container.yml",
+    "network_chaos": "scenarios/openshift/network-chaos.yml",
+    "pod_disruption": "scenarios/openshift/etcd.yml",
+    "node_actions": "scenarios/openshift/node_scenarios_example.yml",
+}
 
 
 def _method_for_plugin(plugin: str) -> str:
@@ -543,8 +601,28 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     if gap.base_scenario:
         lines.append("### Related Existing Scenario")
         lines.append("")
-        lines.append(f"The closest existing scenario is [`{gap.base_scenario}`](https://github.com/krkn-chaos/krkn/blob/main/{gap.base_scenario}). ")
-        lines.append("This scenario tests a related failure mode but does not cover the specific condition described in this bug.")
+        lines.append(
+            f"The closest existing scenario is "
+            f"[`{gap.base_scenario}`](https://github.com/krkn-chaos/krkn/blob/main/{gap.base_scenario}). "
+        )
+        if not base_scenario_matches_plugin(gap.base_scenario, plugin):
+            base_plugin = _plugin_from_base_scenario(gap.base_scenario)
+            base_dir = (
+                base_plugin.removeprefix("krkn/scenario_plugins/").strip("/")
+                if base_plugin
+                else "unknown"
+            )
+            chosen_dir = plugin.removeprefix("krkn/scenario_plugins/").strip("/")
+            lines.append(
+                f"This MAP match uses the **`{base_dir}`** plugin, which differs from the "
+                f"recommended **`{chosen_dir}`** plugin above. Treat it as component context "
+                "(namespace/selectors) only — not as the YAML template to copy."
+            )
+        else:
+            lines.append(
+                "This scenario tests a related failure mode but does not cover the "
+                "specific condition described in this bug."
+            )
         lines.append("")
 
     # Confidence breakdown
@@ -635,25 +713,35 @@ def create_issues_for_gaps(
             and gap.action_type == ActionType.DRAFT_PR
             and gap.base_scenario
         ):
-            from src.agents.pr_creator import create_scenario_pr
-
-            try:
-                pr_result = create_scenario_pr(github, gap, dry_run=dry_run)
-            except Exception as e:
-                logger.error(
-                    "Draft PR failed for %s (%s); falling back to issue",
+            analyzed = normalize_krkn_plugin(gap.krkn_plugin)
+            if analyzed and not base_scenario_matches_plugin(gap.base_scenario, analyzed):
+                logger.warning(
+                    "Skipping draft PR for %s: MAP base_scenario %s does not match "
+                    "ANALYZE plugin %s — creating issue instead",
                     gap.bug.key,
-                    e,
+                    gap.base_scenario,
+                    analyzed,
                 )
-                pr_result = None
+            else:
+                from src.agents.pr_creator import create_scenario_pr
 
-            if pr_result:
-                results.append({**pr_result, "bug_key": gap.bug.key})
-                continue
-            logger.warning(
-                "Draft PR unavailable for %s — creating GitHub issue instead",
-                gap.bug.key,
-            )
+                try:
+                    pr_result = create_scenario_pr(github, gap, dry_run=dry_run)
+                except Exception as e:
+                    logger.error(
+                        "Draft PR failed for %s (%s); falling back to issue",
+                        gap.bug.key,
+                        e,
+                    )
+                    pr_result = None
+
+                if pr_result:
+                    results.append({**pr_result, "bug_key": gap.bug.key})
+                    continue
+                logger.warning(
+                    "Draft PR unavailable for %s — creating GitHub issue instead",
+                    gap.bug.key,
+                )
 
         title = build_issue_title(gap)
         body = build_issue_body(gap, agent_name)
