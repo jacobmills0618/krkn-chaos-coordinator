@@ -1,6 +1,7 @@
 """Tests for issue plugin resolution (MAP / ANALYZE / keyword fallback)."""
 
 from src.agents.act import (
+    base_scenario_matches_plugin,
     build_issue_body,
     normalize_krkn_plugin,
     resolve_injection_method,
@@ -100,6 +101,47 @@ class TestResolveInjectionMethod:
         body = build_issue_body(gap, "networking")
         assert "**Plugin source:** ANALYZE" in body
         assert "krkn/scenario_plugins/network_chaos/" in body
+
+    def test_config_hint_mismatch_hogs_vs_container_ovn(self):
+        """ANALYZE hogs + MAP container_ovn must not claim hog_scenarios on that file."""
+        gap = _gap(
+            bug=_bug("OVS flow causing OVN port binding timeouts"),
+            krkn_plugin="hogs",
+            base_scenario="scenarios/openshift/container_ovn.yml",
+        )
+        _method, plugin, hint, source = resolve_injection_method(gap)
+        assert plugin == _plugin_path("hogs")
+        assert "ANALYZE" in source
+        assert "hog_scenarios" in hint
+        assert "cpu-hog.yml" in hint or "Author or extend" in hint
+        assert "different" in hint.lower()
+        assert "container_ovn.yml" in hint
+        # Must NOT say: Start from container_ovn.yml (scenario type hog_scenarios)
+        assert "Start from `scenarios/openshift/container_ovn.yml` (scenario type `hog_scenarios`)" not in hint
+
+        body = build_issue_body(gap, "networking")
+        assert "**Configuration:**" in body
+        assert "different" in body.lower() or "differs" in body.lower()
+        assert "not as the YAML template" in body or "do not copy" in body.lower()
+
+    def test_config_hint_match_keeps_start_from(self):
+        gap = _gap(
+            krkn_plugin="hogs",
+            base_scenario="scenarios/kube/cpu-hog.yml",
+        )
+        _method, plugin, hint, _source = resolve_injection_method(gap)
+        assert plugin == _plugin_path("hogs")
+        assert "Start from `scenarios/kube/cpu-hog.yml`" in hint
+        assert "hog_scenarios" in hint
+        assert "different" not in hint.lower()
+
+    def test_base_scenario_matches_plugin(self):
+        assert base_scenario_matches_plugin(
+            "scenarios/kube/cpu-hog.yml", _plugin_path("hogs")
+        )
+        assert not base_scenario_matches_plugin(
+            "scenarios/openshift/container_ovn.yml", _plugin_path("hogs")
+        )
 
 
 class TestPluginFromBaseScenario:
