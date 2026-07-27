@@ -46,9 +46,9 @@ ANALYZE scores each gap 0–100. The overall band drives ACT; each scoring categ
 | Category field | Issue label | Points |
 |:---------------|:------------|:-------|
 | `reproduction_confidence` | Reproduction Confidence | +20 if exact repro steps are clear |
-| `scenario_confidence` | Scenario Confidence | +25 if an existing scenario can be extended |
+| `scenario_confidence` | Extendable Scenario | +25 if an existing scenario can be extended |
 | `understanding_confidence` | Understanding Confidence | +20 if docs explain how the component fails |
-| `plugin_confidence` | Plugin Confidence | +15 if a krkn plugin injects this failure |
+| `plugin_confidence` | Injection Capability | +15 if a krkn plugin injects this failure |
 | `domain_confidence` | Domain Confidence | +10 if the bug matches the agent's domain |
 | `history_confidence` | History Confidence | +10 if a similar bug was solved before |
 
