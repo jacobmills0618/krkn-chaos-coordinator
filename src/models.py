@@ -113,9 +113,9 @@ class GapAnalysis:
 # Display labels for issue bodies / UI (field name → human label)
 CONFIDENCE_FACTOR_LABELS: tuple[tuple[str, str], ...] = (
     ("reproduction_confidence", "Reproduction Confidence"),
-    ("scenario_confidence", "Scenario Confidence"),
+    ("scenario_confidence", "Extendable Scenario"),
     ("understanding_confidence", "Understanding Confidence"),
-    ("plugin_confidence", "Plugin Confidence"),
+    ("plugin_confidence", "Injection Capability"),
     ("domain_confidence", "Domain Confidence"),
     ("history_confidence", "History Confidence"),
 )

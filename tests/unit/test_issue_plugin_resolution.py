@@ -164,16 +164,16 @@ class TestResolveInjectionMethod:
         )
         body = build_issue_body(gap, "networking")
         assert "| **Reproduction Confidence** | HIGH |" in body
-        assert "| **Scenario Confidence** | LOW |" in body
+        assert "| **Extendable Scenario** | LOW |" in body
         assert "| **Understanding Confidence** | HIGH |" in body
-        assert "| **Plugin Confidence** | HIGH |" in body
+        assert "| **Injection Capability** | HIGH |" in body
         assert "| **Domain Confidence** | LOW |" in body
         assert "| **History Confidence** | LOW |" in body
         assert (
             "**Reproduction Confidence:** HIGH — Clear PF shutdown + pod create steps (+20)"
             in body
         )
-        assert "**Scenario Confidence:** LOW — No existing scenario to extend (+0)" in body
+        assert "**Extendable Scenario:** LOW — No existing scenario to extend (+0)" in body
 
 
 
