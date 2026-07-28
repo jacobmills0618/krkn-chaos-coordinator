@@ -79,4 +79,30 @@ class TestFormatSummary:
         )
         output = format_summary([result])
         assert "control_plane" in output
-        assert "1 bugs scanned" in output
+        assert "1 discovered" in output
+        assert "0 passed filter" in output
+
+    def test_passed_is_not_discovered_minus_skipped(self):
+        """Known bugs inflate discovered; PASS must use bugs_passed_filter only."""
+        from src.models import FilterResult
+
+        bugs = [_make_bug(f"BUG-{i}") for i in range(10)]
+        skipped = [
+            FilterResult(
+                bug=bugs[0], chaos_relevant=False, skip_reason="no virt keywords",
+                confidence=0.7,
+            )
+        ]
+        result = AgentResult(
+            agent_name="control_plane",
+            bugs_discovered=bugs,
+            bugs_passed_filter=[],
+            bugs_filtered_out=skipped,
+        )
+        output = format_summary([result])
+        assert "Passed:     0 (this run only)" in output
+        assert "Skipped:    1 (this run only)" in output
+        assert "9 known" in output
+        assert "0 passed filter" in output
+        # Must NOT report 9 PASS (= discovered - skipped)
+        assert "Passed:     9" not in output

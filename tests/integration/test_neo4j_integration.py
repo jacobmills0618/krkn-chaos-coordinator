@@ -114,14 +114,18 @@ def _make_result(
     bugs: list[Bug] | None = None,
     gaps: list[GapAnalysis] | None = None,
     filtered_out: list[FilterResult] | None = None,
+    passed: list[FilterResult] | None = None,
+    filter_mode: str = "chaos",
 ) -> AgentResult:
     if bugs is None:
         bugs = [_make_bug()]
     return AgentResult(
         agent_name=f"{_TEST_PREFIX}_agent",
         bugs_discovered=bugs,
+        bugs_passed_filter=passed or [],
         bugs_filtered_out=filtered_out or [],
         gaps=gaps or [],
+        filter_mode=filter_mode,
     )
 
 
@@ -246,6 +250,36 @@ class TestFilterDecisions:
             record = r.single()
             assert record["relevant"] is False
             assert "CVE" in record["reason"]
+
+    def test_domain_filter_sets_virt_relevant_not_chaos(self, store: Neo4jStore) -> None:
+        bug = _make_bug(31)
+        passed = FilterResult(
+            bug=bug,
+            chaos_relevant=True,  # FilterResult reuse; Neo4j maps by filter_mode
+            failure_mode="Domain indicators: kubevirt",
+            confidence=0.85,
+        )
+        result = _make_result(
+            bugs=[bug], passed=[passed], filter_mode="domain",
+        )
+        store.remember_result(result)
+
+        with store._driver.session() as session:
+            r = session.run(
+                """
+                MATCH (b:Bug {key: $key})
+                RETURN b.virt_relevant AS virt,
+                       b.chaos_relevant AS chaos,
+                       b.last_filter_mode AS mode
+                """,
+                key=f"{_TEST_PREFIX}-31",
+            )
+            record = r.single()
+            assert record["virt"] is True
+            assert record["chaos"] is None or record["chaos"] is False
+            assert record["mode"] == "domain"
+
+        assert store.count_virt_relevant_bugs() >= 1
 
 
 class TestRunHistory:

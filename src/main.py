@@ -56,6 +56,13 @@ def main():
         help="Enable LLM-enhanced filter/map/analyze (uses tiered model routing)",
     )
     parser.add_argument(
+        "--domain-filter-only", action="store_true", default=False,
+        help=(
+            "Use ocp-virt domain keywords on every selected agent (any component). "
+            "Skips common chaos keywords and krkn injection matching."
+        ),
+    )
+    parser.add_argument(
         "--krkn-repo",
         default=os.environ.get("KRKN_REPO_PATH", str(Path.home() / "krkn")),
         help="Path to local krkn repo (env: KRKN_REPO_PATH)",
@@ -68,7 +75,23 @@ def main():
         "--parallel", action="store_true", default=False,
         help="Run agents in parallel (faster, requires stable Neo4j connection)",
     )
+    parser.add_argument(
+        "--filter-review-json",
+        default=None,
+        metavar="PATH",
+        help="Write full PASS/SKIP filter lists to JSON (virtualization agent)",
+    )
+    parser.add_argument(
+        "--no-filter-review",
+        action="store_true",
+        default=False,
+        help="Skip interactive filter review prompt after virtualization scans",
+    )
     args = parser.parse_args()
+
+    if args.domain_filter_only and args.use_llm:
+        print("ERROR: --domain-filter-only cannot be combined with --use-llm")
+        return
 
     # Initialize API clients
     jira = JiraClient(
@@ -140,6 +163,9 @@ def main():
             "release": release,
             "neo4j_store": neo4j_store,
             "use_llm": args.use_llm,
+            "domain_filter_only": args.domain_filter_only,
+            "max_bugs": args.max_bugs,
+            "days": args.days,
         }
         agent = BaseDomainAgent(agent_name=agent_name, **agent_kwargs)
         return agent.run()
@@ -172,6 +198,68 @@ def main():
 
     print(format_summary(all_results))
     print()
+
+    ran_virt = "virtualization" in agent_names
+    review_agents = (
+        None if args.domain_filter_only
+        else ("virtualization" if ran_virt else None)
+    )
+    # Always write this-run PASS/SKIP JSON when requested — even with
+    # --no-filter-review — so Batch 3 never reads a stale prior-run file.
+    if args.filter_review_json and (args.domain_filter_only or ran_virt):
+        from src.coordinator.filter_review import (
+            collect_filter_results,
+            write_filter_review_json,
+        )
+        passed, skipped = collect_filter_results(all_results, agent_name=review_agents)
+        agents_in_review = sorted({r.agent_name for r in all_results})
+        if review_agents:
+            agents_in_review = [review_agents]
+        metadata = {
+            "agents": agents_in_review,
+            "domain_filter_only": args.domain_filter_only,
+            "filter_mode": "domain" if args.domain_filter_only else "chaos",
+            "neo4j_flag": "virt_relevant" if args.domain_filter_only else "chaos_relevant",
+            "passed": len(passed),
+            "skipped": len(skipped),
+            "scope": "this_run_new_bugs_only",
+            "note": (
+                "PASS/SKIP are bugs filtered THIS RUN only. "
+                "Domain-only runs store virt_relevant in Neo4j; "
+                "chaos runs store chaos_relevant. "
+                "Known Neo4j bugs were not re-filtered — query Neo4j for historical matches."
+            ),
+        }
+        out = write_filter_review_json(
+            args.filter_review_json, passed, skipped, metadata=metadata,
+        )
+        flag = metadata["neo4j_flag"]
+        print(
+            f"Filter review saved to {out} "
+            f"(this run: {len(passed)} PASS, {len(skipped)} SKIP; Neo4j flag={flag})"
+        )
+        print()
+
+    if (args.domain_filter_only or ran_virt) and not args.no_filter_review:
+        from src.coordinator.filter_review import prompt_filter_review
+        pass_title = (
+            "OCP Virt domain PASS (this run only — virt_relevant)"
+            if args.domain_filter_only
+            else "Filter PASS (this run only — chaos_relevant)"
+        )
+        skip_title = (
+            "OCP Virt domain SKIP (this run only)"
+            if args.domain_filter_only
+            else "Filter SKIP (this run only)"
+        )
+        prompt_filter_review(
+            results=all_results,
+            agent_name=review_agents,
+            export_path=None,
+            title_pass=pass_title,
+            title_skip=skip_title,
+        )
+
     if gaps:
         print(format_approval_queue(gaps))
         _prompt_github_issues(gaps, github)
