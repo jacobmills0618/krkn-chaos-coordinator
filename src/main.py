@@ -95,9 +95,14 @@ def main():
 
     # Initialize knowledge layer
     chroma = ChromaStore(persist_dir="./chroma_data")
-    scenarios = index_scenarios_from_repo(Path(args.krkn_repo))
+    krkn_repo = Path(args.krkn_repo)
+    scenarios = index_scenarios_from_repo(krkn_repo)
 
     logger.info("Indexed %d scenarios from %s", len(scenarios), args.krkn_repo)
+
+    # Build live catalog once per coordinator run (shared by all agents)
+    from src.knowledge.scenario_index import build_krkn_catalog
+    krkn_catalog = build_krkn_catalog(krkn_repo) if args.use_llm else None
 
     # Parse releases and agents
     releases = [r.strip() for r in args.release.split(",") if r.strip()]
@@ -140,6 +145,8 @@ def main():
             "release": release,
             "neo4j_store": neo4j_store,
             "use_llm": args.use_llm,
+            "krkn_repo_path": krkn_repo,
+            "krkn_catalog": krkn_catalog,
         }
         agent = BaseDomainAgent(agent_name=agent_name, **agent_kwargs)
         return agent.run()
