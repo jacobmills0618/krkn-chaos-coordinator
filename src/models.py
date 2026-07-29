@@ -31,6 +31,12 @@ class MatchResult(Enum):
     NO_MATCH = "no_match"
 
 
+class FactorConfidence(Enum):
+    """Per-category score contribution: HIGH = points awarded, LOW = none."""
+    HIGH = "high"
+    LOW = "low"
+
+
 @dataclass(frozen=True)
 class Bug:
     key: str
@@ -74,6 +80,8 @@ class ScenarioMatch:
     matched_scenario: str | None = None
     matched_repo: str | None = None
     similarity_score: float = 0.0
+    filter_failure_mode: str | None = None
+    filter_injection_method: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,9 +92,41 @@ class GapAnalysis:
     confidence_level: Confidence = Confidence.LOW
     action_type: ActionType = ActionType.GITHUB_ISSUE
     reasoning: str = ""
+    failure_mode: str | None = None
+    injection_method: str | None = None
+    configuration: str | None = None
+    related_map_note: str | None = None
+    starter_scenario: str | None = None
     base_scenario: str | None = None
     krkn_plugin: str | None = None
+    filter_injection_method: str | None = None
     modifications: list[str] = field(default_factory=list)
+    reproduction_confidence: FactorConfidence = FactorConfidence.LOW
+    scenario_confidence: FactorConfidence = FactorConfidence.LOW
+    understanding_confidence: FactorConfidence = FactorConfidence.LOW
+    plugin_confidence: FactorConfidence = FactorConfidence.LOW
+    domain_confidence: FactorConfidence = FactorConfidence.LOW
+    history_confidence: FactorConfidence = FactorConfidence.LOW
+    confidence_factor_reasons: tuple[tuple[str, str], ...] = ()
+
+
+CONFIDENCE_FACTOR_LABELS: tuple[tuple[str, str], ...] = (
+    ("reproduction_confidence", "Reproduction Confidence"),
+    ("scenario_confidence", "Extendable Scenario"),
+    ("understanding_confidence", "Understanding Confidence"),
+    ("plugin_confidence", "Injection Capability"),
+    ("domain_confidence", "Domain Confidence"),
+    ("history_confidence", "History Confidence"),
+)
+
+CONFIDENCE_FACTOR_LOW_DEFAULTS: dict[str, str] = {
+    "reproduction_confidence": "Reproduction steps not clear enough (+0)",
+    "scenario_confidence": "No existing scenario to extend (+0)",
+    "understanding_confidence": "Failure mechanism not clear from docs (+0)",
+    "plugin_confidence": "No matching krkn plugin identified (+0)",
+    "domain_confidence": "Does not clearly match the agent domain (+0)",
+    "history_confidence": "No similar resolved bug found (+0)",
+}
 
 
 @dataclass(frozen=True)
