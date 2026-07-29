@@ -325,6 +325,13 @@ class BaseDomainAgent(ABC):
             match, obs = self._find_scenario_match(bug, filter_result, metrics)
             self._slog.log_phase("map", obs.status, obs.summary, bug_key=bug.key)
 
+            from dataclasses import replace
+            match = replace(
+                match,
+                filter_failure_mode=filter_result.failure_mode,
+                filter_injection_method=filter_result.injection_method,
+            )
+
             if match.match_result == MatchResult.FULL_MATCH:
                 matched.append(match)
             else:

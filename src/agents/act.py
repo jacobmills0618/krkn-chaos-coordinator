@@ -4,7 +4,12 @@ import logging
 
 from src.apis.github_client import GitHubClient
 from src.knowledge.scenario_index import scenario_github_url
-from src.models import ActionType, GapAnalysis
+from src.models import (
+    ActionType,
+    CONFIDENCE_FACTOR_LABELS,
+    CONFIDENCE_FACTOR_LOW_DEFAULTS,
+    GapAnalysis,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,135 +32,64 @@ def _get_knowledgebase():
 LABEL = "chaos-coordinator"
 
 
-def _infer_failure_mode(gap: GapAnalysis) -> str:
-    """Infer a human-readable failure mode from the bug."""
-    summary = gap.bug.summary.lower()
-    desc = gap.bug.description.lower() if gap.bug.description else ""
-    text = f"{summary} {desc}"
+def resolve_injection_method(
+    gap: GapAnalysis,
+) -> tuple[str, str, str, str]:
+    """Pass through ANALYZE → FILTER fields for issue text.
 
-    if "node delete" in text or "node replace" in text or "same-name" in text:
-        return "Node replacement / same-name recreation causes stale state"
-    if "throttl" in text or "load" in text or "timeout" in text:
-        return "Component degrades or reports incorrect status under resource pressure"
-    if "upgrade" in text or "duplicate member" in text:
-        return "Upgrade path causes inconsistent cluster state"
-    if "quorum" in text or "leader election" in text:
-        return "Cluster consensus / leader election failure"
-    if "network" in text or "partition" in text:
-        return "Network disruption causes component failure"
-    if "crash" in text or "restart" in text or "loop" in text:
-        return "Component enters crash/restart loop under failure conditions"
-    return "Component failure under adverse conditions"
-
-
-def _plugin_path(plugin_dir: str) -> str:
-    return f"krkn/scenario_plugins/{plugin_dir}/"
-
-
-def _infer_injection_method(gap: GapAnalysis) -> tuple[str, str, str]:
-    """Infer the krkn injection method, plugin, and how to configure it.
-
-    Returns (method_description, plugin_name, config_hint).
+    Returns (injection_method, krkn_plugin, configuration, source_label).
     """
-    summary = gap.bug.summary.lower()
-    desc = gap.bug.description.lower() if gap.bug.description else ""
-    text = f"{summary} {desc}"
+    plugin = (gap.krkn_plugin or "").strip()
+    injection = (gap.injection_method or gap.filter_injection_method or "").strip()
+    configuration = (gap.configuration or "").strip()
+    mods = [m.strip() for m in gap.modifications if isinstance(m, str) and m.strip()]
 
-    if "node delete" in text or "node replace" in text:
+    if not configuration:
+        parts = []
+        if gap.starter_scenario:
+            parts.append(f"Start from `{gap.starter_scenario}`.")
+        if gap.related_map_note:
+            parts.append(gap.related_map_note)
+        elif gap.base_scenario and plugin:
+            parts.append(
+                f"MAP closest file: `{gap.base_scenario}` "
+                "(confirm it matches the ANALYZE plugin before copying)."
+            )
+        if mods:
+            parts.append(mods[0])
+        configuration = " ".join(parts)
+
+    if plugin:
         return (
-            "Delete a control-plane node object via Kubernetes API, wait for Machine API to recreate it with the same name",
-            _plugin_path("node_actions"),
-            "Use `node_stop_start_scenario` or `node_terminate_scenario` with `label_selector: node-role.kubernetes.io/master`. "
-            "Note: current node_actions plugin terminates cloud instances — deleting the Node API object may require a new scenario "
-            "or use of `cluster_shut_down_scenarios` combined with manual `oc delete node`. "
-            "Before writing custom logic, check krkn-lib (`k8s.krkn_kubernetes` for node API operations, "
-            "`ocp.krkn_openshift` for Machine/Node readiness checks).",
+            injection or "(see Analysis / Next Steps)",
+            plugin,
+            configuration or f"See ANALYZE modifications for `{plugin}`.",
+            "ANALYZE",
         )
-    if "throttl" in text or "api server load" in text or "resource pressure" in text:
+    if gap.base_scenario:
         return (
-            "Create resource pressure on API server nodes using CPU/memory hog pods, then verify component health reporting",
-            _plugin_path("hogs"),
-            "Deploy CPU/memory hog pods on master nodes using `label_selector: node-role.kubernetes.io/master`. "
-            "Set `memory` or `cpu` targets high enough to cause API server throttling. "
-            "Combine with a health assertion step that checks the target component's operator status. "
-            "If extending the hog plugin, use krkn-lib (`k8s.krkn_kubernetes`) for pod deployment and node targeting.",
+            injection or "(see Analysis / Next Steps)",
+            "(none — ANALYZE did not recommend a plugin)",
+            configuration or f"MAP closest scenario: `{gap.base_scenario}`.",
+            "MAP",
         )
-    if "upgrade" in text or "rollback" in text:
-        return (
-            "Inject failures during an OCP upgrade to test upgrade resilience",
-            _plugin_path("pod_disruption"),
-            "Run pod kill scenarios targeting the component's pods during an active upgrade. "
-            "Combine with the upgrade Prow workflow (`openshift-qe-upgrade` chain). "
-            "Use krkn-lib (`k8s.krkn_kubernetes`) to resolve target pods by label if adding custom kill logic.",
-        )
-    if "network" in text or "partition" in text or "latency" in text:
-        return (
-            "Inject network latency or partition between component pods",
-            _plugin_path("network_chaos"),
-            "Use `tc netem` based network shaping or iptables-based partition. "
-            "Target the component's namespace and pods. "
-            "Use krkn-lib (`k8s.krkn_kubernetes`) only if you need programmatic pod/namespace discovery.",
-        )
-    if "quorum" in text or "leader" in text or "etcd" in text:
-        return (
-            "Disrupt etcd members to test quorum loss and recovery",
-            _plugin_path("pod_disruption"),
-            "Kill etcd pods in `openshift-etcd` namespace. Verify cluster recovers quorum "
-            "and the etcd operator reports correct status within expected time. "
-            "For post-chaos checks, use krkn-lib (`ocp.krkn_openshift`) for ClusterOperator/etcd status assertions.",
-        )
+    if injection:
+        return (injection, "(none)", configuration or injection, "FILTER")
     return (
-        "Inject component-specific failure and verify recovery",
-        _plugin_path("pod_disruption"),
-        "Target the component's pods in its namespace using label selectors. "
-        "Check krkn-lib (`k8s.krkn_kubernetes`, `ocp.krkn_openshift`) before adding custom injection code.",
+        "(none)",
+        "(none)",
+        configuration or "No plugin or injection method from ANALYZE/MAP/FILTER.",
+        "none",
     )
-
-
-
-def _build_next_steps(gap: GapAnalysis) -> list[str]:
-    """Build concrete next steps for the issue."""
-    steps = []
-    method_desc, plugin, config_hint = _infer_injection_method(gap)
-
-    if gap.base_scenario and gap.action_type == ActionType.DRAFT_PR:
-        steps.append(f"Review the existing scenario at `{gap.base_scenario}` and understand its current configuration")
-        steps.append(f"Create a new scenario YAML (or add a variant) that targets: **{_infer_failure_mode(gap)}**")
-        steps.append(f"Use the `{plugin}` plugin — {config_hint}")
-        steps.append("Add assertions to verify the component reports correct status during/after chaos")
-        steps.append("Add the new scenario to `krkn/scenario_plugins/<plugin_dir>/` (under appropriate scenario type)")
-        steps.append("Write a unit test in `tests/` if adding new plugin logic")
-        steps.append("Create krkn-hub wrapper (Dockerfile, env.sh, run.sh, build_config_file.py, krknctl-input.json) following the standard pattern")
-        steps.append("Update krkn-chaos.dev documentation with the new scenario")
-        steps.append("Add to Prow CI config in `openshift/release` if needed")
-    elif gap.base_scenario:
-        steps.append(f"Evaluate whether `{gap.base_scenario}` can be extended or if a new scenario is needed")
-        steps.append(f"The failure mode is: **{_infer_failure_mode(gap)}**")
-        steps.append(f"Suggested plugin: `{plugin}` — {config_hint}")
-        steps.append("Determine if existing krkn-lib methods support this injection, or if new code is needed")
-        steps.append("If extending: modify the existing YAML to add a new variant")
-        steps.append(
-            f"If new plugin code is needed: implement in `{plugin}` and check "
-            "`krkn-chaos/krkn-lib` for K8s helpers"
-        )
-        steps.append(
-            "If new scenario: follow the plugin creation guide in "
-            "[`krkn-chaos/krkn` CLAUDE.md](https://github.com/krkn-chaos/krkn/blob/main/CLAUDE.md)"
-        )
-    else:
-        steps.append(f"Design a new chaos scenario for: **{_infer_failure_mode(gap)}**")
-        steps.append(f"Suggested plugin: `{plugin}` — {config_hint}")
-        steps.append("Check if krkn-lib has the necessary deployment/injection methods")
-        steps.append("Create scenario YAML, plugin code (if needed), and tests")
-
-    return steps
 
 
 def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     """Build a detailed GitHub issue body with actionable next steps."""
     lines = []
-    failure_mode = _infer_failure_mode(gap)
-    method_desc, plugin, config_hint = _infer_injection_method(gap)
+    failure_mode = (gap.failure_mode or "").strip() or gap.bug.summary
+    method_desc, plugin, config_hint, plugin_source = resolve_injection_method(gap)
+    low_confidence = gap.confidence_score < 40
+    has_factors = bool(gap.confidence_factor_reasons)
 
     # Header
     lines.append("## Chaos Test Coverage Gap")
@@ -166,6 +100,10 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     lines.append(f"| **Component** | {gap.bug.component} |")
     lines.append(f"| **Priority** | {gap.bug.priority} |")
     lines.append(f"| **Confidence** | {gap.confidence_level.value.upper()} ({gap.confidence_score}/100) |")
+    if has_factors:
+        for field_name, label in CONFIDENCE_FACTOR_LABELS:
+            level = getattr(gap, field_name).value.upper()
+            lines.append(f"| **{label}** | {level} |")
     lines.append(f"| **Action** | {'Draft PR recommended' if gap.action_type == ActionType.DRAFT_PR else 'Human review needed'} |")
     lines.append("")
 
@@ -185,21 +123,36 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
     lines.append("")
     lines.append(f"**{failure_mode}**")
     lines.append("")
-    lines.append("This failure mode is not covered by any existing krkn chaos scenario.")
+    if gap.base_scenario:
+        lines.append(
+            f"Closest existing coverage: `{gap.base_scenario}` — related, but does not "
+            "cover this specific failure mode."
+        )
+    else:
+        lines.append("This failure mode is not covered by any existing krkn chaos scenario.")
     lines.append("")
 
-    # How to test
-    lines.append("### How to Chaos Test This")
-    lines.append("")
-    lines.append(f"**Injection method:** {method_desc}")
-    lines.append("")
-    lines.append(f"**krkn plugin:** `{plugin}`")
-    lines.append("")
-    lines.append(f"**Configuration:** {config_hint}")
-    lines.append("")
+    # Recommendations only for MEDIUM/HIGH (LOW = gap description only)
+    if not low_confidence:
+        lines.append("### How to Chaos Test This")
+        lines.append("")
+        lines.append(f"**Injection method:** {method_desc}")
+        lines.append("")
+        lines.append(f"**krkn plugin:** `{plugin}`")
+        lines.append("")
+        lines.append(f"**Plugin source:** {plugin_source}")
+        lines.append("")
+        lines.append(f"**Configuration:** {config_hint}")
+        lines.append("")
+
+    if gap.reasoning:
+        lines.append("### Analysis")
+        lines.append("")
+        lines.append(gap.reasoning)
+        lines.append("")
 
     # Base scenario
-    if gap.base_scenario:
+    if gap.base_scenario and not low_confidence:
         lines.append("### Related Existing Scenario")
         lines.append("")
         scenario_url = scenario_github_url(gap.base_scenario)
@@ -209,54 +162,95 @@ def build_issue_body(gap: GapAnalysis, agent_name: str) -> str:
             )
         else:
             lines.append(f"The closest existing scenario is `{gap.base_scenario}`. ")
-        lines.append("This scenario tests a related failure mode but does not cover the specific condition described in this bug.")
+        note = (gap.related_map_note or "").strip()
+        if note:
+            lines.append(note)
+        else:
+            lines.append(
+                "This scenario tests a related failure mode but does not cover the "
+                "specific condition described in this bug."
+            )
         lines.append("")
 
-    # Confidence breakdown
+    # Confidence breakdown — one line per factor: label, HIGH/LOW, and why
     lines.append("### Confidence Breakdown")
     lines.append("")
     lines.append(f"Score: **{gap.confidence_score}/100** ({gap.confidence_level.value.upper()})")
     lines.append("")
-    for reason in gap.reasoning.split("; "):
-        lines.append(f"- {reason}")
-    lines.append("")
+    if has_factors:
+        reason_map = dict(gap.confidence_factor_reasons)
+        for field_name, label in CONFIDENCE_FACTOR_LABELS:
+            level = getattr(gap, field_name).value.upper()
+            why = reason_map.get(field_name) or CONFIDENCE_FACTOR_LOW_DEFAULTS.get(
+                field_name, ""
+            )
+            if why:
+                lines.append(f"- **{label}:** {level} — {why}")
+            else:
+                lines.append(f"- **{label}:** {level}")
+        lines.append("")
+    else:
+        lines.append("Per-factor confidence was not assessed for this gap.")
+        lines.append("")
 
-    # Generated commands from knowledge base
-    kb = _get_knowledgebase()
-    if kb:
-        try:
-            from src.generator.scenario_generator import generate_issue_section
-            generated = generate_issue_section(gap, kb)
-            if generated:
-                lines.append(generated)
-        except Exception as e:
-            logger.warning("Scenario generation failed for %s: %s", gap.bug.key, e)
+    # Generated commands from knowledge base (MEDIUM/HIGH only)
+    if not low_confidence:
+        kb = _get_knowledgebase()
+        if kb:
+            try:
+                from src.generator.scenario_generator import generate_issue_section
+                generated = generate_issue_section(gap, kb)
+                if generated:
+                    lines.append(generated)
+            except Exception as e:
+                logger.warning("Scenario generation failed for %s: %s", gap.bug.key, e)
 
     # Next steps
     lines.append("### Next Steps")
     lines.append("")
-    next_steps = _build_next_steps(gap)
+    if low_confidence:
+        next_steps = [
+            "Track this coverage gap; confidence is too low for an implementation recommendation.",
+        ]
+    else:
+        next_steps = [
+            m.strip() for m in gap.modifications if isinstance(m, str) and m.strip()
+        ]
+        if not next_steps:
+            next_steps = [
+                "Review the Analysis section and design a scenario using the "
+                f"recommended plugin (`{plugin}`)."
+            ]
     for i, step in enumerate(next_steps, 1):
         lines.append(f"{i}. {step}")
     lines.append("")
 
-    # Repos to change
-    lines.append("### Repos to Update")
-    lines.append("")
-    lines.append("| Repo | Change |")
-    lines.append("|---|---|")
-    lines.append(
-        f"| `krkn-chaos/krkn` | Scenario YAML under `{plugin}`; register in "
-        "`krkn/config/config.yaml`; extend plugin code there if needed |"
-    )
-    lines.append(
-        "| `krkn-chaos/krkn-lib` | K8s/OpenShift helpers if new API calls are needed |"
-    )
-    if gap.action_type == ActionType.DRAFT_PR:
-        lines.append(f"| `krkn-chaos/krkn-hub` | Container wrapper (Dockerfile, env.sh, run.sh, build_config_file.py) |")
-        lines.append(f"| `krkn-chaos/website` | Documentation (Hugo page with krkn/krkn-hub/krknctl tabs) |")
-        lines.append(f"| `openshift/release` | Prow CI config (if adding to nightly runs) |")
-    lines.append("")
+    # Repos to change (MEDIUM/HIGH only)
+    if not low_confidence:
+        lines.append("### Repos to Update")
+        lines.append("")
+        lines.append("| Repo | Change |")
+        lines.append("|---|---|")
+        lines.append(
+            f"| `krkn-chaos/krkn` | Scenario YAML under `{plugin}`; register in "
+            "`krkn/config/config.yaml`; extend plugin code there if needed |"
+        )
+        lines.append(
+            "| `krkn-chaos/krkn-lib` | K8s/OpenShift helpers if new API calls are needed |"
+        )
+        if gap.action_type == ActionType.DRAFT_PR:
+            lines.append(
+                "| `krkn-chaos/krkn-hub` | Container wrapper "
+                "(Dockerfile, env.sh, run.sh, build_config_file.py) |"
+            )
+            lines.append(
+                "| `krkn-chaos/website` | Documentation "
+                "(Hugo page with krkn/krkn-hub/krknctl tabs) |"
+            )
+            lines.append(
+                "| `openshift/release` | Prow CI config (if adding to nightly runs) |"
+            )
+        lines.append("")
 
     lines.append("---")
     lines.append(f"*Generated by krkn-chaos-coordinator / {agent_name} agent*")
