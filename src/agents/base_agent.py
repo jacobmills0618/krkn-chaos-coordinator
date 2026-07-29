@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from abc import ABC
 from dataclasses import asdict
+from pathlib import Path
 
 from src.agents.registry import discover_agents
 from src.apis.jira_client import JiraClient
@@ -55,6 +57,8 @@ class BaseDomainAgent(ABC):
         domain_filter_only: bool = False,
         max_bugs: int = 2000,
         days: int = 14,
+        krkn_repo_path: str | Path | None = None,
+        krkn_catalog: dict | None = None,
     ):
         self.agent_name = agent_name
         self.jira = jira
@@ -68,6 +72,8 @@ class BaseDomainAgent(ABC):
         self.domain_filter_only = domain_filter_only
         self.max_bugs = max_bugs
         self.days = days
+        self.krkn_repo_path = Path(krkn_repo_path) if krkn_repo_path else None
+        self.krkn_catalog = krkn_catalog
         self.components = get_components_for_agent(agent_name)
         agent_config = discover_agents().get(agent_name)
         self._discovery_jql = agent_config.discovery_jql if agent_config else None
@@ -396,6 +402,20 @@ class BaseDomainAgent(ABC):
         self, unmatched: list[ScenarioMatch], metrics: RunMetrics,
     ) -> list[GapAnalysis]:
         gaps = []
+        krkn_catalog = self.krkn_catalog
+        if self.use_llm and unmatched and krkn_catalog is None:
+            from src.knowledge.scenario_index import build_krkn_catalog
+            krkn_catalog = build_krkn_catalog(self.krkn_repo_path)
+            logger.info(
+                json.dumps(
+                    {
+                        "event": "krkn_catalog_ready",
+                        "plugins": len(krkn_catalog.get("plugins") or []),
+                        "source": krkn_catalog.get("source"),
+                        "repo_path": krkn_catalog.get("repo_path"),
+                    }
+                )
+            )
 
         for i, match in enumerate(unmatched):
             bug = match.bug
@@ -420,6 +440,7 @@ class BaseDomainAgent(ABC):
                     ocp_docs=tuple(ocp_docs),
                     krkn_docs=tuple(krkn_docs),
                     neo4j_history=tuple(neo4j_history),
+                    krkn_catalog=krkn_catalog,
                 )
                 gap, obs = analyze_gap_llm(bug, match, ctx)
                 metrics.llm_analyze_calls += 1

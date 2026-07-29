@@ -134,14 +134,22 @@ def match_scenario(
     2. Knowledge base find_scenario (fuzzy)
     3. Search from gap reasoning text
     """
-    # Extract plugin name from reasoning or modifications
+    # Prefer structured field from ANALYZE (full path or bare dir)
     plugin_name = None
+    if getattr(gap, "krkn_plugin", None):
+        raw = gap.krkn_plugin.strip().strip("`")
+        if raw.startswith("krkn/scenario_plugins/"):
+            raw = raw.removeprefix("krkn/scenario_plugins/").strip("/")
+        plugin_name = raw.split("/")[0].lower().replace("-", "_") or None
 
-    # Check reasoning for "krkn plugin: xxx"
-    if gap.reasoning:
-        match = re.search(r"krkn plugin:\s*([a-z_]+)", gap.reasoning.lower())
+    # Check reasoning for "krkn plugin: xxx" (dir or full path)
+    if not plugin_name and gap.reasoning:
+        match = re.search(
+            r"krkn plugin:\s*(?:krkn/scenario_plugins/)?([a-z0-9_-]+)",
+            gap.reasoning.lower(),
+        )
         if match:
-            plugin_name = match.group(1)
+            plugin_name = match.group(1).replace("-", "_")
 
     # Check if reasoning itself is a known plugin/category name
     if not plugin_name and gap.reasoning:

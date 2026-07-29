@@ -4,7 +4,7 @@ import json
 from unittest.mock import patch
 
 from src.models import Bug, FilterResult, MatchResult, ScenarioMatch, GapAnalysis, Confidence, ActionType
-from src.reasoning import llm_map_match, llm_analyze_gap
+from src.reasoning import _normalize_plugin_path, llm_map_match, llm_analyze_gap
 
 
 def _make_bug(key="TEST-1", summary="", description="", component="Etcd"):
@@ -215,3 +215,16 @@ class TestLlmAnalyzeGap:
         gap = llm_analyze_gap(bug=bug, match=match, ocp_docs=[], krkn_docs=[], neo4j_history=[])
 
         assert gap.confidence_score <= 100
+
+
+class TestNormalizePluginPath:
+    def test_hyphen_to_underscore(self):
+        plugins = ["network_chaos"]
+        assert _normalize_plugin_path("network-chaos", plugins) == (
+            "krkn/scenario_plugins/network_chaos/"
+        )
+        assert _normalize_plugin_path(
+            "krkn/scenario_plugins/network-chaos/", plugins
+        ) == "krkn/scenario_plugins/network_chaos/"
+        assert _normalize_plugin_path("network-chaos", []) is None
+        assert _normalize_plugin_path("not_a_plugin", ["hogs"]) is None
