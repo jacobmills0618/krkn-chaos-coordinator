@@ -198,6 +198,7 @@ You are given:
 3. Relevant OCP architecture documentation
 4. Available krkn plugins and their capabilities
 5. Previously resolved similar bugs (from Neo4j history)
+6. A live catalog of plugin directories and scenario files from the local krkn clone
 
 Your job: analyze the gap and produce a SPECIFIC recommendation for how to fill it.
 
@@ -213,14 +214,42 @@ For modifications, be SPECIFIC:
 - BAD: "extend the etcd scenario"
 - GOOD: "Add a test case to scenarios/openshift/etcd.yml that deploys CPU hog pods on master nodes (use hog_scenarios plugin with cpu target 80%, duration 300s). While hog is running, check etcd operator status with: oc get co/etcd -o jsonpath='{.status.conditions}'. Assert: etcd should NOT report Degraded=True while members are actually healthy."
 
+Do not invent plugin names outside the live catalog. Prefer full paths like
+``krkn/scenario_plugins/<dir>/``.
+
 Respond with ONLY a JSON object:
 {
   "confidence_score": 0-100,
   "reasoning": "Detailed explanation of the score breakdown and analysis",
   "modifications": ["specific step 1", "specific step 2", ...],
-  "krkn_plugin": "exact plugin name" or null,
+  "krkn_plugin": "krkn/scenario_plugins/<dir>/" or null,
   "repos_to_update": ["krkn", "krkn-hub", "website"]
-}"""
+}
+
+If confidence_score >= 40, krkn_plugin MUST be set from the catalog (never null).
+Only use null when confidence_score < 40."""
+
+
+def _normalize_plugin_path(raw: str | None, plugins: list[str]) -> str | None:
+    """Accept catalog dir or full path; return ``krkn/scenario_plugins/<dir>/``.
+
+    Fails closed when ``plugins`` is empty (catalog unavailable) so LLM names
+    are never accepted without membership validation.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    if not plugins:
+        return None
+    value = raw.strip().strip("`")
+    if value.startswith("krkn/scenario_plugins/"):
+        value = value.removeprefix("krkn/scenario_plugins/").strip("/")
+    value = value.split("/")[0].lower().replace("-", "_")
+    if not value:
+        return None
+    catalog = {d.lower().replace("-", "_"): d for d in plugins}
+    if value not in catalog:
+        return None
+    return f"krkn/scenario_plugins/{catalog[value]}/"
 
 
 def llm_analyze_gap(
@@ -230,6 +259,7 @@ def llm_analyze_gap(
     krkn_docs: list[dict],
     neo4j_history: list[dict],
     config: LLMBackendConfig | None = None,
+    krkn_catalog: dict | None = None,
 ) -> GapAnalysis:
     """Use LLM to analyze a coverage gap and produce specific recommendations.
 
@@ -240,12 +270,23 @@ def llm_analyze_gap(
         krkn_docs: ChromaDB krkn doc search results for available plugins.
         neo4j_history: Similar resolved bugs from Neo4j.
         config: LLM backend config. Auto-detected if None.
+        krkn_catalog: Optional prebuilt catalog from ``build_krkn_catalog``
+            (preferred once per ANALYZE run). Built on demand if omitted.
 
     Returns:
         GapAnalysis with LLM-generated confidence score, reasoning, and modifications.
     """
     if config is None:
         config = detect_llm_backend(phase="analyze")
+
+    from src.knowledge.scenario_index import (
+        build_krkn_catalog,
+        format_krkn_catalog_for_prompt,
+    )
+
+    catalog = krkn_catalog if krkn_catalog is not None else build_krkn_catalog()
+    plugins = list(catalog.get("plugins") or [])
+    catalog_block = format_krkn_catalog_for_prompt(catalog)
 
     ocp_context = "\n---\n".join(
         hit["text"][:400] for hit in ocp_docs[:3]
@@ -289,6 +330,9 @@ Available krkn Plugins:
 Previously Resolved Similar Bugs:
 {history_context}
 
+Live krkn catalog (prefer these paths; do not invent names):
+{catalog_block}
+
 Analyze this gap. Score confidence and provide SPECIFIC modifications."""
 
     try:
@@ -309,12 +353,13 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
         result = json.loads(text)
 
         score = min(100, max(0, int(result.get("confidence_score", 0))))
+        krkn_plugin = _normalize_plugin_path(result.get("krkn_plugin"), plugins)
 
         reasoning_parts = []
         if result.get("reasoning"):
             reasoning_parts.append(result["reasoning"])
-        if result.get("krkn_plugin"):
-            reasoning_parts.append(f"krkn plugin: {result['krkn_plugin']}")
+        if krkn_plugin:
+            reasoning_parts.append(f"krkn plugin: {krkn_plugin}")
         if result.get("repos_to_update"):
             reasoning_parts.append(f"Repos: {', '.join(result['repos_to_update'])}")
         reasoning = "; ".join(reasoning_parts)
@@ -340,6 +385,7 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
             action_type=action,
             reasoning=reasoning,
             base_scenario=match.matched_scenario,
+            krkn_plugin=krkn_plugin,
             modifications=modifications,
         )
 

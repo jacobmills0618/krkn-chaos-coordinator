@@ -85,6 +85,7 @@ class GapAnalysis:
     action_type: ActionType = ActionType.GITHUB_ISSUE
     reasoning: str = ""
     base_scenario: str | None = None
+    krkn_plugin: str | None = None
     modifications: list[str] = field(default_factory=list)
 
 
@@ -131,6 +132,7 @@ class AnalyzeContext:
     ocp_docs: tuple[dict, ...] = ()
     krkn_docs: tuple[dict, ...] = ()
     neo4j_history: tuple[dict, ...] = ()
+    krkn_catalog: dict | None = None  # built once per ANALYZE run
 
 
 @dataclass
