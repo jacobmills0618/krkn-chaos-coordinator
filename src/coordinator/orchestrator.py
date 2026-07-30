@@ -53,7 +53,12 @@ def format_approval_queue(gaps: list[GapAnalysis]) -> str:
 
 
 def format_summary(results: list[AgentResult]) -> str:
-    """Format a summary of all agent results."""
+    """Format a summary of all agent results.
+
+    PASS/SKIP counts come from bugs filtered **this run** (new bugs only).
+    Known bugs already in Neo4j are not re-filtered and must not be reported
+    as domain/filter matches for the current agent selection.
+    """
     lines = []
     lines.append("=" * 60)
     lines.append("krkn-chaos-coordinator — Run Summary")
@@ -63,32 +68,39 @@ def format_summary(results: list[AgentResult]) -> str:
     total_bugs = 0
     total_relevant = 0
     total_skipped = 0
+    total_known = 0
     total_matched = 0
     total_gaps = 0
 
     for result in results:
         discovered = len(result.bugs_discovered)
         skipped = len(result.bugs_filtered_out)
-        relevant = discovered - skipped
+        relevant = len(result.bugs_passed_filter)
+        filtered_this_run = relevant + skipped
+        known = max(0, discovered - filtered_this_run)
         matched = len(result.bugs_matched)
         gaps = len(result.gaps)
 
         total_bugs += discovered
         total_relevant += relevant
         total_skipped += skipped
+        total_known += known
         total_matched += matched
         total_gaps += gaps
 
         lines.append(f"Agent: {result.agent_name}")
-        lines.append(f"  Discovered: {discovered} bugs")
-        lines.append(f"  Filtered:   {skipped} skipped (not chaos-relevant)")
-        lines.append(f"  Relevant:   {relevant}")
+        lines.append(f"  Discovered: {discovered} bugs ({filtered_this_run} new filtered this run, {known} known)")
+        lines.append(f"  Passed:     {relevant} (this run only)")
+        lines.append(f"  Skipped:    {skipped} (this run only)")
         lines.append(f"  Matched:    {matched} (existing coverage)")
         lines.append(f"  Gaps:       {gaps}")
         lines.append("")
 
     lines.append("-" * 40)
-    lines.append(f"TOTAL: {total_bugs} bugs scanned, {total_relevant} chaos-relevant, "
-                 f"{total_gaps} gaps identified")
+    lines.append(
+        f"TOTAL this run: {total_bugs} discovered, {total_relevant} passed filter, "
+        f"{total_skipped} skipped, {total_known} known (not re-filtered), "
+        f"{total_gaps} gaps identified"
+    )
     lines.append("=" * 60)
     return "\n".join(lines)

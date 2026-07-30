@@ -96,6 +96,44 @@ class JiraClient:
 
         return self._priority_then_backfill(component_list, "", days, max_results)
 
+    def discover_bugs(
+        self,
+        components: list[str],
+        days: int = 14,
+        max_results: int = 2000,
+        release: str | None = None,
+        discovery_jql: str | None = None,
+    ) -> list[Bug]:
+        """Fetch bugs by component, optionally backfilling with a JQL text search."""
+        bugs = self.get_bugs_by_components(
+            components, days=days, max_results=max_results, release=release,
+        )
+        if not discovery_jql:
+            return bugs
+
+        remaining = max_results - len(bugs)
+        if remaining <= 0:
+            return bugs[:max_results]
+
+        seen_keys = {b.key for b in bugs}
+        jql = f"({discovery_jql}) AND created >= -{days}d ORDER BY created DESC"
+        extra = self._search(jql, max_results)
+        backfill_count = 0
+        for bug in extra:
+            if bug.key in seen_keys:
+                continue
+            bugs.append(bug)
+            seen_keys.add(bug.key)
+            backfill_count += 1
+            if len(bugs) >= max_results:
+                break
+
+        logger.info(
+            "Discovery backfill: %d total bugs (%d from JQL backfill)",
+            len(bugs), backfill_count,
+        )
+        return bugs[:max_results]
+
     def _four_tier_version_query(
         self,
         component_list: str,

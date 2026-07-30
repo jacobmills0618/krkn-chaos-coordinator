@@ -87,7 +87,8 @@ class Neo4jStore:
                 CREATE (r:Run {
                     id: $id, agent: $agent, timestamp: $ts,
                     bugs_discovered: $discovered, bugs_filtered: $filtered,
-                    bugs_matched: $matched, gaps_found: $gaps
+                    bugs_matched: $matched, gaps_found: $gaps,
+                    filter_mode: $filter_mode
                 })
                 """,
                 id=run_id, agent=result.agent_name, ts=timestamp,
@@ -95,6 +96,7 @@ class Neo4jStore:
                 filtered=len(result.bugs_filtered_out),
                 matched=len(result.bugs_matched),
                 gaps=len(result.gaps),
+                filter_mode=result.filter_mode,
             )
 
             # Store bugs + components
@@ -139,27 +141,71 @@ class Neo4jStore:
                         component=comp_name, key=bug.key,
                     )
 
-            # Store filter decisions — mark skipped bugs
-            filtered_out_keys = set()
-            for fr in result.bugs_filtered_out:
-                filtered_out_keys.add(fr.bug.key)
-                session.run(
-                    """
-                    MERGE (b:Bug {key: $key})
-                    SET b.chaos_relevant = false, b.skip_reason = $reason
-                    """,
-                    key=fr.bug.key, reason=fr.skip_reason,
-                )
+            # Store filter decisions only for bugs filtered THIS RUN.
+            # Domain-only runs set virt_relevant (ocp-virt keywords) — not chaos_relevant.
+            # Chaos runs set chaos_relevant. Known bugs are not re-filtered.
+            domain_only = result.filter_mode == "domain"
 
-            # Mark chaos-relevant bugs (passed filter)
-            for bug in result.bugs_discovered:
-                if bug.key not in filtered_out_keys:
+            for fr in result.bugs_filtered_out:
+                if domain_only:
                     session.run(
                         """
                         MERGE (b:Bug {key: $key})
-                        SET b.chaos_relevant = true
+                        SET b.virt_relevant = false,
+                            b.skip_reason = $reason,
+                            b.last_filter_agent = $agent,
+                            b.last_filter_mode = 'domain',
+                            b.last_filter_outcome = 'skip'
                         """,
-                        key=bug.key,
+                        key=fr.bug.key,
+                        reason=fr.skip_reason,
+                        agent=result.agent_name,
+                    )
+                else:
+                    session.run(
+                        """
+                        MERGE (b:Bug {key: $key})
+                        SET b.chaos_relevant = false,
+                            b.skip_reason = $reason,
+                            b.last_filter_agent = $agent,
+                            b.last_filter_mode = 'chaos',
+                            b.last_filter_outcome = 'skip'
+                        """,
+                        key=fr.bug.key,
+                        reason=fr.skip_reason,
+                        agent=result.agent_name,
+                    )
+
+            for fr in result.bugs_passed_filter:
+                if domain_only:
+                    session.run(
+                        """
+                        MERGE (b:Bug {key: $key})
+                        SET b.virt_relevant = true,
+                            b.skip_reason = null,
+                            b.last_filter_agent = $agent,
+                            b.last_filter_mode = 'domain',
+                            b.last_filter_outcome = 'pass',
+                            b.failure_mode = $failure_mode
+                        """,
+                        key=fr.bug.key,
+                        agent=result.agent_name,
+                        failure_mode=fr.failure_mode,
+                    )
+                else:
+                    session.run(
+                        """
+                        MERGE (b:Bug {key: $key})
+                        SET b.chaos_relevant = true,
+                            b.skip_reason = null,
+                            b.last_filter_agent = $agent,
+                            b.last_filter_mode = 'chaos',
+                            b.last_filter_outcome = 'pass',
+                            b.failure_mode = $failure_mode
+                        """,
+                        key=fr.bug.key,
+                        agent=result.agent_name,
+                        failure_mode=fr.failure_mode,
                     )
 
             # Store gaps
@@ -252,6 +298,76 @@ class Neo4jStore:
 
     # Sync alias
     get_analyzed_bug_keys_sync = get_analyzed_bug_keys
+
+    def get_chaos_relevant_bugs_by_component(self) -> list[dict]:
+        """Count Neo4j bugs with chaos_relevant=true, grouped by JIRA component."""
+        return self._count_bugs_by_component("chaos_relevant")
+
+    def get_chaos_relevant_bugs_by_filter_agent(self) -> list[dict]:
+        """Count Neo4j chaos_relevant bugs grouped by last_filter_agent."""
+        return self._count_bugs_by_filter_agent("chaos_relevant")
+
+    def count_chaos_relevant_bugs(self) -> int:
+        """Total bugs in Neo4j marked chaos_relevant=true."""
+        return self._count_bugs_by_flag("chaos_relevant")
+
+    def get_virt_relevant_bugs_by_component(self) -> list[dict]:
+        """Count Neo4j bugs with virt_relevant=true, grouped by JIRA component.
+
+        Set by --domain-filter-only (ocp-virt keywords). Distinct from chaos_relevant.
+        """
+        return self._count_bugs_by_component("virt_relevant")
+
+    def get_virt_relevant_bugs_by_filter_agent(self) -> list[dict]:
+        """Count Neo4j virt_relevant bugs grouped by last_filter_agent."""
+        return self._count_bugs_by_filter_agent("virt_relevant")
+
+    def count_virt_relevant_bugs(self) -> int:
+        """Total bugs in Neo4j marked virt_relevant=true (domain filter)."""
+        return self._count_bugs_by_flag("virt_relevant")
+
+    def _count_bugs_by_flag(self, flag: str) -> int:
+        if flag not in ("chaos_relevant", "virt_relevant"):
+            raise ValueError(f"Unsupported bug flag: {flag}")
+        with self._driver.session() as session:
+            r = session.run(
+                f"""
+                MATCH (b:Bug)
+                WHERE b.{flag} = true
+                RETURN count(b) AS total
+                """
+            )
+            record = r.single()
+            return int(record["total"]) if record else 0
+
+    def _count_bugs_by_component(self, flag: str) -> list[dict]:
+        if flag not in ("chaos_relevant", "virt_relevant"):
+            raise ValueError(f"Unsupported bug flag: {flag}")
+        with self._driver.session() as session:
+            r = session.run(
+                f"""
+                MATCH (c:Component)-[:HAS_BUG]->(b:Bug)
+                WHERE b.{flag} = true
+                RETURN c.name AS component, count(DISTINCT b) AS bugs
+                ORDER BY bugs DESC
+                """
+            )
+            return [dict(record) for record in r]
+
+    def _count_bugs_by_filter_agent(self, flag: str) -> list[dict]:
+        if flag not in ("chaos_relevant", "virt_relevant"):
+            raise ValueError(f"Unsupported bug flag: {flag}")
+        with self._driver.session() as session:
+            r = session.run(
+                f"""
+                MATCH (b:Bug)
+                WHERE b.{flag} = true
+                RETURN coalesce(b.last_filter_agent, 'unknown') AS filter_agent,
+                       count(b) AS bugs
+                ORDER BY bugs DESC
+                """
+            )
+            return [dict(record) for record in r]
 
     def get_open_gaps(self) -> list[dict]:
         with self._driver.session() as session:
