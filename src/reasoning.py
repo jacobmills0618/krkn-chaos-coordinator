@@ -15,6 +15,7 @@ from src.models import (
     Bug,
     Confidence,
     ActionType,
+    FactorConfidence,
     FilterResult,
     GapAnalysis,
     MatchResult,
@@ -116,6 +117,8 @@ Relevant OCP/krkn documentation:
 
 Does any existing scenario cover this bug's exact failure mode?"""
 
+    injection = filter_result.injection_method
+    failure = filter_result.failure_mode
     try:
         text = call_llm(
             messages=[
@@ -147,14 +150,26 @@ Does any existing scenario cover this bug's exact failure mode?"""
             matched_scenario=matched_scenario,
             matched_repo="krkn-chaos/krkn" if matched_scenario else None,
             similarity_score=1.0 if match_result == MatchResult.FULL_MATCH else 0.5 if match_result == MatchResult.PARTIAL_MATCH else 0.0,
+            filter_failure_mode=failure,
+            filter_injection_method=injection,
         )
 
     except (json.JSONDecodeError, KeyError) as e:
         logger.warning("LLM MAP failed for %s (bad response), falling back: %s", bug.key, e)
-        return _fallback_match(bug, scenario_hits)
+        from dataclasses import replace
+        return replace(
+            _fallback_match(bug, scenario_hits),
+            filter_failure_mode=failure,
+            filter_injection_method=injection,
+        )
     except Exception as e:
         logger.warning("LLM MAP failed for %s, falling back: %s", bug.key, e)
-        return _fallback_match(bug, scenario_hits)
+        from dataclasses import replace
+        return replace(
+            _fallback_match(bug, scenario_hits),
+            filter_failure_mode=failure,
+            filter_injection_method=injection,
+        )
 
 
 def _fallback_match(bug: Bug, scenario_hits: list[dict]) -> ScenarioMatch:
@@ -194,33 +209,231 @@ ANALYZE_SYSTEM_PROMPT = """You are a chaos engineering expert for OpenShift/Kube
 
 You are given:
 1. A JIRA bug with its failure mode
-2. The closest existing krkn scenario (if any — partial match or no match)
+2. The closest existing krkn scenario from MAP (if any)
 3. Relevant OCP architecture documentation
 4. Available krkn plugins and their capabilities
 5. Previously resolved similar bugs (from Neo4j history)
+6. A live catalog of plugin directories and scenario files from the local krkn clone
 
 Your job: analyze the gap and produce a SPECIFIC recommendation for how to fill it.
 
-Scoring guide (0-100):
-- Can you explain exact reproduction steps? (+20)
-- Is there an existing scenario to extend? (+25)
-- Do you understand HOW the component fails from the docs? (+20)
-- Is there a krkn plugin that injects this exact failure? (+15)
-- Does this match the agent's domain? (+10)
-- Have we solved a similar bug before? (+10)
+Prefer causal-chain injection over symptom surrogates (e.g. NetworkPolicy density → OVS
+flow pressure, not a CPU hog that only shares CNI timeout symptoms). If the catalog cannot
+inject the real cause, prefix injection_method with "SURROGATE:" and set plugin confidence LOW.
 
-For modifications, be SPECIFIC:
-- BAD: "extend the etcd scenario"
-- GOOD: "Add a test case to scenarios/openshift/etcd.yml that deploys CPU hog pods on master nodes (use hog_scenarios plugin with cpu target 80%, duration 300s). While hog is running, check etcd operator status with: oc get co/etcd -o jsonpath='{.status.conditions}'. Assert: etcd should NOT report Degraded=True while members are actually healthy."
+Scoring guide (0-100):
+- Can you explain exact reproduction steps? (+20) → reproduction
+- Is there an existing scenario YAML to extend? (+25) → scenario (Extendable Scenario)
+- Do you understand HOW the component fails from the docs? (+20) → understanding
+- Is there a krkn plugin that injects this failure (real cause, not unlabeled surrogate)? (+15) → plugin (Injection Capability)
+- Does this match the agent's domain? (+10) → domain
+- Have we solved a similar bug before? (+10) → history
+
+For each scoring item, set confidence_factors.<key> to
+{"level": "high"|"low", "reason": "short why including +/- points"}.
+
+Issue fields below are copied into the GitHub issue verbatim. Do not invent plugin
+names or scenario paths outside the live catalog.
+
+- krkn_plugin: prefer full path ``krkn/scenario_plugins/<dir>/`` from the catalog
+- starter_scenario: a catalog scenarios/*.yml that uses THAT same plugin (shape reference)
+- configuration: one paragraph for implementers (plugin path, starter YAML, and if MAP's
+  closest file is a different plugin, say so and warn not to copy it as the starter)
+- related_map_note: if MAP matched_scenario is a different plugin than krkn_plugin, say so;
+  otherwise null or a short "same plugin / related failure mode" note
 
 Respond with ONLY a JSON object:
 {
   "confidence_score": 0-100,
+  "confidence_factors": {
+    "reproduction": {"level": "high" or "low", "reason": "..."},
+    "scenario": {"level": "high" or "low", "reason": "..."},
+    "understanding": {"level": "high" or "low", "reason": "..."},
+    "plugin": {"level": "high" or "low", "reason": "..."},
+    "domain": {"level": "high" or "low", "reason": "..."},
+    "history": {"level": "high" or "low", "reason": "..."}
+  },
   "reasoning": "Detailed explanation of the score breakdown and analysis",
+  "failure_mode": "one-sentence uncovered failure mode",
+  "injection_method": "causal injection steps; prefix SURROGATE: if not the real cause",
+  "configuration": "Configuration paragraph for the GitHub issue",
+  "starter_scenario": "scenarios/.../*.yml from catalog" or null,
+  "related_map_note": "note about MAP file vs chosen plugin" or null,
   "modifications": ["specific step 1", "specific step 2", ...],
-  "krkn_plugin": "exact plugin name" or null,
+  "krkn_plugin": "krkn/scenario_plugins/<dir>/" or null,
   "repos_to_update": ["krkn", "krkn-hub", "website"]
-}"""
+}
+
+If confidence_score >= 40, krkn_plugin MUST be set from the catalog (never null).
+Only use null when confidence_score < 40."""
+
+
+def _factor_from_value(value: object) -> FactorConfidence:
+    if isinstance(value, FactorConfidence):
+        return value
+    if isinstance(value, dict):
+        return _factor_from_value(value.get("level") or value.get("value"))
+    if isinstance(value, str) and value.strip().lower() in ("high", "h"):
+        return FactorConfidence.HIGH
+    return FactorConfidence.LOW
+
+
+def _reason_from_value(value: object) -> str | None:
+    if isinstance(value, dict):
+        reason = value.get("reason") or value.get("why") or value.get("explanation")
+        if isinstance(reason, str) and reason.strip():
+            return reason.strip()
+    return None
+
+
+_FACTOR_SHORT_KEYS = (
+    ("reproduction", "reproduction_confidence"),
+    ("scenario", "scenario_confidence"),
+    ("understanding", "understanding_confidence"),
+    ("plugin", "plugin_confidence"),
+    ("domain", "domain_confidence"),
+    ("history", "history_confidence"),
+)
+
+
+def derive_confidence_factors(
+    bug: Bug,
+    match: ScenarioMatch,
+    *,
+    krkn_plugin: str | None = None,
+    neo4j_history: list[dict] | None = None,
+    llm_factors: dict | None = None,
+) -> tuple[dict[str, FactorConfidence], tuple[tuple[str, str], ...]]:
+    """Compute HIGH/LOW and reasons for each ANALYZE scoring category.
+
+    HIGH means that category contributed points; LOW means zero points.
+    When ``llm_factors`` is provided, those values win for keys the model set.
+    """
+    has_repro = bool(bug.description and len(bug.description) > 200)
+    has_scenario = match.match_result == MatchResult.PARTIAL_MATCH or bool(
+        match.matched_scenario
+    )
+    has_understanding = has_repro
+    has_plugin = bool(krkn_plugin)
+    has_domain = True
+    has_history = bool(neo4j_history)
+
+    derived = {
+        "reproduction_confidence": (
+            FactorConfidence.HIGH if has_repro else FactorConfidence.LOW
+        ),
+        "scenario_confidence": (
+            FactorConfidence.HIGH if has_scenario else FactorConfidence.LOW
+        ),
+        "understanding_confidence": (
+            FactorConfidence.HIGH if has_understanding else FactorConfidence.LOW
+        ),
+        "plugin_confidence": (
+            FactorConfidence.HIGH if has_plugin else FactorConfidence.LOW
+        ),
+        "domain_confidence": (
+            FactorConfidence.HIGH if has_domain else FactorConfidence.LOW
+        ),
+        "history_confidence": (
+            FactorConfidence.HIGH if has_history else FactorConfidence.LOW
+        ),
+    }
+    reasons: dict[str, str] = {
+        "reproduction_confidence": (
+            "Clear reproduction detail in bug description (+20)"
+            if has_repro
+            else "Reproduction steps not clear enough (+0)"
+        ),
+        "scenario_confidence": (
+            f"Existing scenario to extend: {match.matched_scenario} (+25)"
+            if has_scenario and match.matched_scenario
+            else "No existing scenario to extend (+0)"
+        ),
+        "understanding_confidence": (
+            "Failure mechanism clear enough from bug/docs (+20)"
+            if has_understanding
+            else "Failure mechanism not clear from docs (+0)"
+        ),
+        "plugin_confidence": (
+            f"Plugin identified: {krkn_plugin} (+15)"
+            if has_plugin
+            else "No matching krkn plugin identified (+0)"
+        ),
+        "domain_confidence": "Matches agent domain (+10)",
+        "history_confidence": (
+            "Similar resolved bug found (+10)"
+            if has_history
+            else "No similar resolved bug found (+0)"
+        ),
+    }
+
+    if isinstance(llm_factors, dict):
+        for raw_key, field_name in _FACTOR_SHORT_KEYS:
+            if raw_key not in llm_factors:
+                continue
+            raw_val = llm_factors[raw_key]
+            derived[field_name] = _factor_from_value(raw_val)
+            llm_reason = _reason_from_value(raw_val)
+            if llm_reason:
+                reasons[field_name] = llm_reason
+
+    reason_tuples = tuple(
+        (field, reasons[field]) for _, field in _FACTOR_SHORT_KEYS
+    )
+    return derived, reason_tuples
+
+
+def _normalize_plugin_path(raw: str | None, plugins: list[str]) -> str | None:
+    """Accept catalog dir or full path; return ``krkn/scenario_plugins/<dir>/``.
+
+    Fails closed when ``plugins`` is empty (catalog unavailable) so LLM names
+    are never accepted without membership validation.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    if not plugins:
+        return None
+    value = raw.strip().strip("`")
+    if value.startswith("krkn/scenario_plugins/"):
+        value = value.removeprefix("krkn/scenario_plugins/").strip("/")
+    value = value.split("/")[0].lower().replace("-", "_")
+    if not value:
+        return None
+    catalog = {d.lower().replace("-", "_"): d for d in plugins}
+    if value not in catalog:
+        return None
+    return f"krkn/scenario_plugins/{catalog[value]}/"
+
+
+def _normalize_starter_scenario(
+    raw: str | None,
+    scenarios: list[str],
+) -> str | None:
+    """Accept a catalog scenario path; reject unknowns (fail closed if empty)."""
+    if not raw or not isinstance(raw, str):
+        return None
+    if not scenarios:
+        return None
+    value = raw.strip().strip("`").lstrip("./").replace("\\", "/")
+    if not value.startswith("scenarios/"):
+        return None
+
+    by_norm: dict[str, str] = {}
+    for path in scenarios:
+        key = path.replace("\\", "/")
+        by_norm[key] = path
+        if key.endswith(".yaml"):
+            by_norm[key[:-5] + ".yml"] = path
+        elif key.endswith(".yml"):
+            by_norm[key[:-4] + ".yaml"] = path
+
+    return by_norm.get(value)
+
+
+def _optional_str(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def llm_analyze_gap(
@@ -230,6 +443,7 @@ def llm_analyze_gap(
     krkn_docs: list[dict],
     neo4j_history: list[dict],
     config: LLMBackendConfig | None = None,
+    krkn_catalog: dict | None = None,
 ) -> GapAnalysis:
     """Use LLM to analyze a coverage gap and produce specific recommendations.
 
@@ -240,12 +454,23 @@ def llm_analyze_gap(
         krkn_docs: ChromaDB krkn doc search results for available plugins.
         neo4j_history: Similar resolved bugs from Neo4j.
         config: LLM backend config. Auto-detected if None.
+        krkn_catalog: Optional prebuilt catalog from ``build_krkn_catalog``
+            (preferred once per ANALYZE run). Built on demand if omitted.
 
     Returns:
         GapAnalysis with LLM-generated confidence score, reasoning, and modifications.
     """
     if config is None:
         config = detect_llm_backend(phase="analyze")
+
+    from src.knowledge.scenario_index import (
+        build_krkn_catalog,
+        format_krkn_catalog_for_prompt,
+    )
+
+    catalog = krkn_catalog if krkn_catalog is not None else build_krkn_catalog()
+    plugins = list(catalog.get("plugins") or [])
+    catalog_block = format_krkn_catalog_for_prompt(catalog)
 
     ocp_context = "\n---\n".join(
         hit["text"][:400] for hit in ocp_docs[:3]
@@ -271,12 +496,19 @@ def llm_analyze_gap(
     else:
         fix_info = "Not yet fixed in any z-stream. Active gap — high priority."
 
+    filter_bits = []
+    if match.filter_failure_mode:
+        filter_bits.append(f"FILTER failure_mode: {match.filter_failure_mode}")
+    if match.filter_injection_method:
+        filter_bits.append(f"FILTER injection_method: {match.filter_injection_method}")
+    filter_section = ("\n".join(filter_bits) + "\n") if filter_bits else ""
+
     prompt = f"""Bug: {bug.key}
 Component: {bug.component}
 Summary: {bug.summary}
 Release Status: {fix_info}
 Description: {bug.description[:1000] if bug.description else 'No description'}
-
+{filter_section}
 Match result: {match.match_result.value}
 {scenario_context}
 
@@ -288,6 +520,9 @@ Available krkn Plugins:
 
 Previously Resolved Similar Bugs:
 {history_context}
+
+Live krkn catalog (prefer these paths; do not invent names):
+{catalog_block}
 
 Analyze this gap. Score confidence and provide SPECIFIC modifications."""
 
@@ -309,12 +544,16 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
         result = json.loads(text)
 
         score = min(100, max(0, int(result.get("confidence_score", 0))))
+        krkn_plugin = _normalize_plugin_path(result.get("krkn_plugin"), plugins)
+        # Scores >= 40 require a catalog-validated plugin; otherwise downgrade.
+        if score >= 40 and not krkn_plugin:
+            score = 39
 
         reasoning_parts = []
         if result.get("reasoning"):
             reasoning_parts.append(result["reasoning"])
-        if result.get("krkn_plugin"):
-            reasoning_parts.append(f"krkn plugin: {result['krkn_plugin']}")
+        if krkn_plugin:
+            reasoning_parts.append(f"krkn plugin: {krkn_plugin}")
         if result.get("repos_to_update"):
             reasoning_parts.append(f"Repos: {', '.join(result['repos_to_update'])}")
         reasoning = "; ".join(reasoning_parts)
@@ -322,6 +561,12 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
         modifications = result.get("modifications", [])
         if not isinstance(modifications, list):
             modifications = [str(modifications)]
+
+        failure_mode = _optional_str(result.get("failure_mode")) or match.filter_failure_mode
+        injection_method = (
+            _optional_str(result.get("injection_method"))
+            or match.filter_injection_method
+        )
 
         if score >= 70:
             confidence = Confidence.HIGH
@@ -333,14 +578,34 @@ Analyze this gap. Score confidence and provide SPECIFIC modifications."""
             confidence = Confidence.LOW
             action = ActionType.GITHUB_ISSUE
 
+        factors, factor_reasons = derive_confidence_factors(
+            bug,
+            match,
+            krkn_plugin=krkn_plugin,
+            neo4j_history=neo4j_history,
+            llm_factors=result.get("confidence_factors"),
+        )
+
         return GapAnalysis(
             bug=bug,
             confidence_score=score,
             confidence_level=confidence,
             action_type=action,
             reasoning=reasoning,
+            failure_mode=failure_mode,
+            injection_method=injection_method,
+            configuration=_optional_str(result.get("configuration")),
+            related_map_note=_optional_str(result.get("related_map_note")),
+            starter_scenario=_normalize_starter_scenario(
+                result.get("starter_scenario"),
+                catalog.get("scenarios") or [],
+            ),
             base_scenario=match.matched_scenario,
+            krkn_plugin=krkn_plugin,
+            filter_injection_method=match.filter_injection_method,
             modifications=modifications,
+            confidence_factor_reasons=factor_reasons,
+            **factors,
         )
 
     except (json.JSONDecodeError, KeyError) as e:
@@ -387,12 +652,19 @@ def _fallback_analyze(bug: Bug, match: ScenarioMatch) -> GapAnalysis:
     if match.matched_scenario:
         modifications.append(f"Extend {match.matched_scenario}")
 
+    factors, factor_reasons = derive_confidence_factors(bug, match)
+
     return GapAnalysis(
         bug=bug,
         confidence_score=score,
         confidence_level=confidence,
         action_type=action,
         reasoning="; ".join(reasoning_parts),
+        failure_mode=match.filter_failure_mode,
+        injection_method=match.filter_injection_method,
         base_scenario=match.matched_scenario,
+        filter_injection_method=match.filter_injection_method,
         modifications=modifications,
+        confidence_factor_reasons=factor_reasons,
+        **factors,
     )

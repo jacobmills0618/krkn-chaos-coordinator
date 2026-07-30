@@ -4,7 +4,12 @@ import json
 from unittest.mock import patch
 
 from src.models import Bug, FilterResult, MatchResult, ScenarioMatch, GapAnalysis, Confidence, ActionType
-from src.reasoning import llm_map_match, llm_analyze_gap
+from src.reasoning import (
+    _normalize_plugin_path,
+    _normalize_starter_scenario,
+    llm_map_match,
+    llm_analyze_gap,
+)
 
 
 def _make_bug(key="TEST-1", summary="", description="", component="Etcd"):
@@ -136,7 +141,7 @@ class TestLlmAnalyzeGap:
                 "While hog is active, validate OVN state: ovs-vsctl show + ovn-sbctl list chassis",
                 "Assert: ovn-controller chassis bindings remain synchronized under CPU pressure",
             ],
-            "krkn_plugin": "cpu_hog_scenarios",
+            "krkn_plugin": "hogs",
             "repos_to_update": ["krkn", "krkn-hub"],
         })
 
@@ -157,6 +162,7 @@ class TestLlmAnalyzeGap:
             ocp_docs=[{"text": "OVN-Kubernetes uses distributed virtual routing"}],
             krkn_docs=[{"text": "CPU Hog scenario creates CPU pressure on nodes"}],
             neo4j_history=[],
+            krkn_catalog={"plugins": ["hogs", "network_chaos"], "scenarios": [], "source": "repo"},
         )
 
         assert gap.confidence_score == 85
@@ -215,3 +221,32 @@ class TestLlmAnalyzeGap:
         gap = llm_analyze_gap(bug=bug, match=match, ocp_docs=[], krkn_docs=[], neo4j_history=[])
 
         assert gap.confidence_score <= 100
+
+
+class TestNormalizePluginPath:
+    def test_hyphen_to_underscore(self):
+        plugins = ["network_chaos"]
+        assert _normalize_plugin_path("network-chaos", plugins) == (
+            "krkn/scenario_plugins/network_chaos/"
+        )
+        assert _normalize_plugin_path(
+            "krkn/scenario_plugins/network-chaos/", plugins
+        ) == "krkn/scenario_plugins/network_chaos/"
+        assert _normalize_plugin_path("network-chaos", []) is None
+        assert _normalize_plugin_path("not_a_plugin", ["hogs"]) is None
+
+
+class TestNormalizeStarterScenario:
+    def test_catalog_membership(self):
+        scenarios = ["scenarios/kube/cpu-hog.yml", "scenarios/openshift/container_ovn.yml"]
+        assert (
+            _normalize_starter_scenario("scenarios/kube/cpu-hog.yml", scenarios)
+            == "scenarios/kube/cpu-hog.yml"
+        )
+        assert (
+            _normalize_starter_scenario("scenarios/kube/cpu-hog.yaml", scenarios)
+            == "scenarios/kube/cpu-hog.yml"
+        )
+        assert _normalize_starter_scenario("scenarios/openshift/fake.yml", scenarios) is None
+        assert _normalize_starter_scenario("scenarios/kube/cpu-hog.yml", []) is None
+        assert _normalize_starter_scenario("not/a/scenario.yml", scenarios) is None

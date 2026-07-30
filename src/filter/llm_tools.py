@@ -186,6 +186,7 @@ def analyze_gap_llm(
             krkn_docs=list(context.krkn_docs),
             neo4j_history=list(context.neo4j_history),
             config=config,
+            krkn_catalog=context.krkn_catalog,
         )
         elapsed = time.monotonic() - start
 
