@@ -2,7 +2,6 @@
 # Agent-specific keywords go in each agent's YAML (config/agents/<name>.yaml).
 
 skip_keywords:
-  - "CVE-"
   - "security tracking"
   - "vulnerability"
   - "flaky test"
