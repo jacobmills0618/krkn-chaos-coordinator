@@ -26,12 +26,14 @@ DISCOVER → FILTER → MAP → ANALYZE → ACT → REMEMBER
 
 | Phase | What it does |
 |:------|:------------|
-| **DISCOVER** | Query JIRA bugs (4-tier version matching) + z-stream changelogs |
-| **FILTER** | 3-tier: keyword pre-filter → semantic cache → LLM classification |
-| **MAP** | ChromaDB RAG + LLM reasoning over existing krkn scenarios |
-| **ANALYZE** | Score confidence (0-100), generate specific krkn modifications |
-| **ACT** | Create GitHub issues or draft PRs based on confidence |
-| **REMEMBER** | Store in Neo4j — never re-analyze the same bug |
+| **[DISCOVER](docs/pipeline.md#discover)** | Find relevant bugs |
+| **[FILTER](docs/pipeline.md#filter)** | Keep chaos-testable bugs |
+| **[MAP](docs/pipeline.md#map)** | Check existing coverage |
+| **[ANALYZE](docs/pipeline.md#analyze)** | Score gaps and recommend fixes |
+| **[ACT](docs/pipeline.md#act)** | Open issues or draft PRs |
+| **[REMEMBER](docs/pipeline.md#remember)** | Save results for next run |
+
+Full detail: [Pipeline phases](docs/pipeline.md).
 
 ## Agents
 
