@@ -31,10 +31,7 @@ skip_keywords:
 
 ocp-virt_keywords:
   # Product / platform identity
-<<<<<<< HEAD
   - "virtualization"
-=======
->>>>>>> 507149c (feat: add OpenShift Virtualization agent and ocp-virt filter pipeline)
   - "openshift virtualization"
   - "openshift virtualisation"
   - "ocp-virt"
@@ -69,10 +66,7 @@ ocp-virt_keywords:
 
   # Storage / Disks
   - "containerized data importer"
-<<<<<<< HEAD
   - "cdi"
-=======
->>>>>>> 507149c (feat: add OpenShift Virtualization agent and ocp-virt filter pipeline)
   - "cdi-operator"
   - "cdi-controller"
   - "cdi-apiserver"
@@ -99,9 +93,6 @@ ocp-virt_keywords:
   - "virtual machine"
   - "virtualmachineinstance"
   - "virtual machine instance"
-<<<<<<< HEAD
   - "vm"
-=======
->>>>>>> 507149c (feat: add OpenShift Virtualization agent and ocp-virt filter pipeline)
   - "vmi"
   - "vmim"

@@ -37,7 +37,9 @@ If the user query is NOT empty, run in **Targeted Query** mode:
 
 Before running the pipeline, ask the user these questions using AskUserQuestion.
 
-**Batch 1 — ask Questions 1–4 in a single AskUserQuestion call:**
+**AskUserQuestion limits:**
+- **At most 4 options per question** (hard API limit).
+- **Batch 1:** Questions 1–4 in **one** `AskUserQuestion` call → **one screen, four tabs** (toggle between questions, submit once).
 
 **Question 1 — OCP Version:**
 - Question: "Which OpenShift version(s) to scan?"
@@ -48,11 +50,10 @@ Before running the pipeline, ask the user these questions using AskUserQuestion.
   - "All (4.19, 4.20, 4.21, 4.22)" — Scan across all supported versions
 - Note: User can also type a custom comma-separated list like "4.20,4.21"
 
-**Question 2 — Agent Scope:**
+**Question 2 — Agent Scope (Tab 2):**
 
-**Step 1 — Discover agents:**
+Discover agents first, then embed the full list in the **question text** (not as button options):
 
-- First, discover available agents dynamically:
 ```bash
 cd /Users/sahil/krkn-chaos-coordinator && PYTHONPATH=. /opt/homebrew/opt/python@3.11/bin/python3.11 -c "
 from src.agents.registry import discover_agents,format_agent_prompt_option
@@ -61,7 +62,7 @@ for name, cfg in sorted(discover_agents().items()):
 "
 ```
 
-**Step 2 — Canonical fixed options** (edit labels/order here; `agent_id` must match YAML `name`):
+Use fixed labels from `config/agents/scan_prompt.yaml` when present; otherwise use `format_agent_prompt_option()` output.
 
 | agent_id | Fixed option label |
 |----------|-------------------|
@@ -73,30 +74,22 @@ for name, cfg in sorted(discover_agents().items()):
 | upgrade_lifecycle | Upgrade lifecycle — CVO, MCO, installer (upgrade_lifecycle) |
 | virtualization | OpenShift Virtualization — VM, migration, KubeVirt (virtualization) |
 
-**Step 3 — Merge into AskUserQuestion options:**
+- Question: "Which domain agent(s) should run?\n\nAvailable agents:\n- control_plane — Control plane (etcd, API server, scheduler)\n- networking — OVN, DNS, ingress\n- … (one bullet per discovered agent, with agent_id)\n\nUse agent_id values when specifying agents."
+- Options (only 2 — stays within API limit):
+  - "All agents (Recommended)"
+  - "Input Agent(s)"
+- **If "All agents (Recommended)"** → omit `--agent` (run all discovered agents).
+- **If "Input Agent(s)"** → after the user submits the tabbed form, ask in **chat**: "Enter agent ID(s), comma-separated (e.g. `virtualization` or `control_plane,networking`):". Validate IDs against discovery output; then `--agent <comma-separated ids>`.
 
-1. Start with: `"All agents (Recommended)"`
-2. Build a map from Step 1 output: `agent_id` → tab-separated dynamic label (second column).
-3. For each row in the fixed table **whose `agent_id` appears in discovery output**, use the **fixed label** (ignore the dynamic label for that agent).
-4. For each discovered agent **not** in the fixed table, append the dynamic label from Step 1 (respects optional `prompt_label` in agent YAML via `format_agent_prompt_option`).
-5. Sort merged agent options alphabetically by `agent_id` (parse from trailing `(agent_id)` in each label).
-6. If a fixed-table agent is missing from discovery (YAML removed), **omit** that row — do not offer stale agents.
-7. Final options: `"All agents (Recommended)"` first, then sorted merged agent options.
-
-- Question: "Which domain agent(s) should run?"
-- multiSelect: true
-- Options: output above (`All agents (Recommended)` first)
-- Map selection → CLI: `"All agents"` → omit `--agent`; else extract `(agent_id)` suffix → `--agent virtualization,storage`
-- Edit fixed labels: `config/agents/scan_prompt.yaml`. Per-agent override: `prompt_label` in agent YAML.
+Do **not** list each agent as a separate AskUserQuestion option (exceeds 4-option limit with 7+ agents).
 
 **Question 3 — Lookback Window:**
 - Question: "How many days back should we scan for bugs?"
 - Options:
-  - "365 days (Recommended for virt)" — Full year (needed for virtualization agent sample size)
-  - "14 days (Recommended)" — Last 2 weeks of bugs
-  - "7 days" — Last week only (quick scan)
-  - "30 days" — Full month (more thorough)
-  - "60 days" — Deep scan (catches older unfixed bugs)
+  - "7 days" — Last week (Quick scan)
+  - "14 days" — Last 2 weeks (Recommended)
+  - "30 days" — Full month (More thorough)
+  - "365 days" — Full year (Virtualization agent — needed for sample size)
 
 **Question 4 — Scan Settings:**
 - Question: "What kind of scan?"
@@ -191,7 +184,7 @@ Map the user's interactive selections:
 - "365 days" → `--days 365`
 - "14 days" → `--days 14`
 - "All agents" → omit `--agent` flag
-- Specific agent(s) → extract `agent_id` from `(agent_id)` suffix in Question 2 labels → `--agent control_plane,networking`
+- "Input Agent(s)" → use the comma-separated agent IDs from the chat follow-up → `--agent control_plane,networking`
 - OpenShift Virtualization stage only → add `--domain-filter-only` (applies ocp-virt keywords to all selected agents)
 
 ## After Filter: Review PASS / SKIP (when OpenShift Virtualization stage is enabled)
@@ -366,7 +359,7 @@ When both stages are enabled (default), stage 2 runs as a single `filter_bug()` 
 - Total usage logged at end: `TOKEN USAGE: X input + Y output = Z total, cost=$X, calls=N`
 
 ### Pluggable Agents (auto-discovered from config/agents/*.yaml):
-Each YAML defines name, components, filter keywords, docs. Scan wizard labels: `config/agents/scan_prompt.yaml` (fixed) + `list_scan_prompt_options()` (dynamic for new agents).
+Each YAML defines name, components, filter keywords, docs. Scan wizard: discover agents, show the list in Question 2 text, offer only "All agents" / "Input Agent(s)" (stays within AskUserQuestion's 4-option limit). Fixed labels: `config/agents/scan_prompt.yaml` when present; else `format_agent_prompt_option()`.
 
 ### Knowledge Layer:
 - **ChromaDB**: Vector search over krkn scenarios, krkn docs, OCP docs, agent-specific docs, filter cache
