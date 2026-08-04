@@ -8,14 +8,82 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
+import subprocess
+import time
 from datetime import datetime, timezone
 
 from neo4j import GraphDatabase
 
 from src.apis.github_client import load_project_env
-from src.models import AgentResult, FilterResult, GapAnalysis
+from src.models import AgentResult, Bug, FilterResult, GapAnalysis
 
 logger = logging.getLogger(__name__)
+
+NEO4J_CONTAINER = os.environ.get("NEO4J_CONTAINER", "neo4j-coordinator")
+
+_PODMAN_CANDIDATES = (
+    "podman",
+    "/opt/podman/bin/podman",
+    "/usr/local/bin/podman",
+    "/opt/homebrew/bin/podman",
+)
+_DOCKER_CANDIDATES = ("docker", "/usr/local/bin/docker", "/opt/homebrew/bin/docker")
+
+
+def _resolve_engine() -> str | None:
+    """Return absolute path to podman or docker, including common macOS install paths."""
+    for name in _PODMAN_CANDIDATES + _DOCKER_CANDIDATES:
+        if os.path.isabs(name):
+            if os.path.isfile(name) and os.access(name, os.X_OK):
+                return name
+        else:
+            found = shutil.which(name)
+            if found:
+                return found
+    return None
+
+
+def restart_neo4j_container(container: str = NEO4J_CONTAINER) -> bool:
+    """Restart (or start) Neo4j. For Podman, wake the machine first if needed."""
+    engine = _resolve_engine()
+    if not engine:
+        logger.error("Cannot restart Neo4j: neither podman nor docker found")
+        return False
+
+    is_podman = os.path.basename(engine) == "podman"
+    if is_podman:
+        try:
+            result = subprocess.run(
+                [engine, "machine", "start"],
+                capture_output=True, text=True, timeout=120,
+            )
+            # 0 = started; non-zero often means already running — continue either way
+            if result.returncode == 0:
+                logger.warning("Podman machine started via %s", engine)
+            else:
+                err = (result.stderr or result.stdout).strip()
+                if err and "already" not in err.lower():
+                    logger.warning("podman machine start: %s", err)
+        except Exception as e:
+            logger.warning("podman machine start error: %s", e)
+
+    for action in ("restart", "start"):
+        try:
+            result = subprocess.run(
+                [engine, action, container],
+                capture_output=True, text=True, timeout=60,
+            )
+            if result.returncode == 0:
+                logger.warning("Neo4j container %s: %s via %s", container, action, engine)
+                return True
+            logger.warning(
+                "%s %s %s failed: %s",
+                engine, action, container, (result.stderr or result.stdout).strip(),
+            )
+        except Exception as e:
+            logger.warning("%s %s %s error: %s", engine, action, container, e)
+    return False
 
 
 class Neo4jStore:
@@ -41,6 +109,7 @@ class Neo4jStore:
 
     def connect(self) -> bool:
         """Connect to Neo4j and create schema."""
+        self.close()
         try:
             self._driver = GraphDatabase.driver(
                 self._uri, auth=(self._user, self._password)
@@ -51,10 +120,38 @@ class Neo4jStore:
             return True
         except (OSError, ConnectionError) as e:
             logger.error("Neo4j connection refused at %s: %s", self._uri, e)
+            self.close()
             return False
         except Exception as e:
             logger.error("Neo4j connection failed (unexpected): %s: %s", type(e).__name__, e)
+            self.close()
             return False
+
+    def ensure_connected(self, retries: int = 3) -> bool:
+        """Verify Bolt; restart the Neo4j container and reconnect if down."""
+        for attempt in range(1, retries + 1):
+            try:
+                if self._driver is not None:
+                    self._driver.verify_connectivity()
+                    return True
+            except Exception as e:
+                logger.warning("Neo4j stale (attempt %d/%d): %s", attempt, retries, e)
+                self.close()
+
+            if self.connect():
+                return True
+
+            logger.warning(
+                "Neo4j unreachable (attempt %d/%d) — restarting %s",
+                attempt, retries, NEO4J_CONTAINER,
+            )
+            if restart_neo4j_container():
+                time.sleep(5)
+                if self.connect():
+                    return True
+            if attempt < retries:
+                time.sleep(attempt)
+        return False
 
     def _create_schema(self) -> None:
         queries = [
@@ -73,15 +170,11 @@ class Neo4jStore:
                 except Exception as e:
                     logger.warning("Index creation failed (%s): %s", q[:50], e)
 
-    def remember_result(self, result: AgentResult) -> dict:
-        """Store an agent run's results in the graph."""
+    def record_run(self, result: AgentResult) -> str:
+        """Create a Run node and link it to the agent."""
         timestamp = datetime.now(timezone.utc).isoformat()
-        new_bugs = 0
-        new_gaps = 0
-
+        run_id = f"{result.agent_name}_{timestamp}"
         with self._driver.session() as session:
-            # Store the run
-            run_id = f"{result.agent_name}_{timestamp}"
             session.run(
                 """
                 CREATE (r:Run {
@@ -98,147 +191,6 @@ class Neo4jStore:
                 gaps=len(result.gaps),
                 filter_mode=result.filter_mode,
             )
-
-            # Store bugs + components
-            for bug in result.bugs_discovered:
-                # Truncate description to 2000 chars for Neo4j storage
-                desc = (bug.description or "")[:2000]
-                all_comps = list(bug.all_components) if bug.all_components else [bug.component]
-
-                r = session.run(
-                    """
-                    MERGE (b:Bug {key: $key})
-                    ON CREATE SET b.first_seen = $ts, b.created = $created
-                    SET b.last_seen = $ts, b.summary = $summary,
-                        b.priority = $priority, b.status = $status,
-                        b.url = $url, b.description = $description,
-                        b.all_components = $all_components,
-                        b.fixed_in_release = $fixed_in_release,
-                        b.fix_image = $fix_image,
-                        b.fix_commits = $fix_commits
-                    RETURN b.first_seen = $ts AS is_new
-                    """,
-                    key=bug.key, summary=bug.summary,
-                    priority=bug.priority, status=bug.status,
-                    created=bug.created, url=bug.url, ts=timestamp,
-                    description=desc, all_components=all_comps,
-                    fixed_in_release=bug.fixed_in_release,
-                    fix_image=bug.fix_image,
-                    fix_commits=list(bug.fix_commits) if bug.fix_commits else [],
-                )
-                record = r.single()
-                if record and record["is_new"]:
-                    new_bugs += 1
-
-                # Link bug to ALL components (not just primary)
-                for comp_name in all_comps:
-                    session.run(
-                        """
-                        MERGE (c:Component {name: $component})
-                        MERGE (b:Bug {key: $key})
-                        MERGE (c)-[:HAS_BUG]->(b)
-                        """,
-                        component=comp_name, key=bug.key,
-                    )
-
-            # Store filter decisions only for bugs filtered THIS RUN.
-            # Domain-only runs set virt_relevant (ocp-virt keywords) — not chaos_relevant.
-            # Chaos runs set chaos_relevant. Known bugs are not re-filtered.
-            domain_only = result.filter_mode == "domain"
-
-            for fr in result.bugs_filtered_out:
-                if domain_only:
-                    session.run(
-                        """
-                        MERGE (b:Bug {key: $key})
-                        SET b.virt_relevant = false,
-                            b.skip_reason = $reason,
-                            b.last_filter_agent = $agent,
-                            b.last_filter_mode = 'domain',
-                            b.last_filter_outcome = 'skip'
-                        """,
-                        key=fr.bug.key,
-                        reason=fr.skip_reason,
-                        agent=result.agent_name,
-                    )
-                else:
-                    session.run(
-                        """
-                        MERGE (b:Bug {key: $key})
-                        SET b.chaos_relevant = false,
-                            b.skip_reason = $reason,
-                            b.last_filter_agent = $agent,
-                            b.last_filter_mode = 'chaos',
-                            b.last_filter_outcome = 'skip'
-                        """,
-                        key=fr.bug.key,
-                        reason=fr.skip_reason,
-                        agent=result.agent_name,
-                    )
-
-            for fr in result.bugs_passed_filter:
-                if domain_only:
-                    session.run(
-                        """
-                        MERGE (b:Bug {key: $key})
-                        SET b.virt_relevant = true,
-                            b.skip_reason = null,
-                            b.last_filter_agent = $agent,
-                            b.last_filter_mode = 'domain',
-                            b.last_filter_outcome = 'pass',
-                            b.failure_mode = $failure_mode
-                        """,
-                        key=fr.bug.key,
-                        agent=result.agent_name,
-                        failure_mode=fr.failure_mode,
-                    )
-                else:
-                    session.run(
-                        """
-                        MERGE (b:Bug {key: $key})
-                        SET b.chaos_relevant = true,
-                            b.skip_reason = null,
-                            b.last_filter_agent = $agent,
-                            b.last_filter_mode = 'chaos',
-                            b.last_filter_outcome = 'pass',
-                            b.failure_mode = $failure_mode
-                        """,
-                        key=fr.bug.key,
-                        agent=result.agent_name,
-                        failure_mode=fr.failure_mode,
-                    )
-
-            # Store gaps
-            for gap in result.gaps:
-                gap_id = f"{gap.bug.key}_{result.agent_name}"
-                r = session.run(
-                    """
-                    MATCH (b:Bug {key: $bug_key})
-                    MERGE (g:Gap {id: $gap_id})
-                    ON CREATE SET g.confidence = $confidence,
-                        g.confidence_level = $level,
-                        g.action_type = $action_type,
-                        g.reasoning = $reasoning,
-                        g.base_scenario = $base_scenario,
-                        g.status = 'open',
-                        g.opened_at = $ts,
-                        g.agent = $agent
-                    MERGE (b)-[:HAS_GAP]->(g)
-                    RETURN g.opened_at = $ts AS is_new
-                    """,
-                    bug_key=gap.bug.key, gap_id=gap_id,
-                    confidence=gap.confidence_score,
-                    level=gap.confidence_level.value,
-                    action_type=gap.action_type.value,
-                    reasoning=gap.reasoning,
-                    base_scenario=gap.base_scenario,
-                    ts=timestamp, agent=result.agent_name,
-                )
-                record = r.single()
-                if record and record["is_new"]:
-                    new_gaps += 1
-
-            # Link run to agent
             session.run(
                 """
                 MERGE (a:Agent {name: $agent})
@@ -248,9 +200,163 @@ class Neo4jStore:
                 """,
                 agent=result.agent_name, run_id=run_id,
             )
+        return run_id
+
+    def remember_result(self, result: AgentResult) -> dict:
+        """Store an agent run's results in the graph."""
+        timestamp = datetime.now(timezone.utc).isoformat()
+        new_bugs = 0
+        new_gaps = 0
+        domain_only = result.filter_mode == "domain"
+        self.record_run(result)
+
+        with self._driver.session() as session:
+            for bug in result.bugs_discovered:
+                if self._upsert_bug(session, bug, timestamp):
+                    new_bugs += 1
+
+            for fr in result.bugs_filtered_out:
+                self._set_filter(session, fr, result.agent_name, domain_only, passed=False)
+            for fr in result.bugs_passed_filter:
+                self._set_filter(session, fr, result.agent_name, domain_only, passed=True)
+
+            for gap in result.gaps:
+                if self._upsert_gap(session, gap, result.agent_name, timestamp):
+                    new_gaps += 1
 
         logger.info("Neo4j REMEMBER: %d new bugs, %d new gaps", new_bugs, new_gaps)
         return {"new_bugs": new_bugs, "new_gaps": new_gaps}
+
+    def persist_bug(self, bug: Bug) -> None:
+        ts = datetime.now(timezone.utc).isoformat()
+        with self._driver.session() as session:
+            self._upsert_bug(session, bug, ts)
+
+    def persist_filter(
+        self, fr: FilterResult, agent: str, *, filter_mode: str = "chaos",
+    ) -> None:
+        with self._driver.session() as session:
+            self._upsert_bug(session, fr.bug, datetime.now(timezone.utc).isoformat())
+            self._set_filter(
+                session, fr, agent, domain_only=(filter_mode == "domain"),
+                passed=fr.chaos_relevant,
+            )
+
+    def persist_gap(self, gap: GapAnalysis, agent: str) -> None:
+        ts = datetime.now(timezone.utc).isoformat()
+        with self._driver.session() as session:
+            self._upsert_bug(session, gap.bug, ts)
+            self._upsert_gap(session, gap, agent, ts)
+
+    def _upsert_bug(self, session, bug: Bug, timestamp: str) -> bool:
+        desc = (bug.description or "")[:2000]
+        all_comps = list(bug.all_components) if bug.all_components else [bug.component]
+        r = session.run(
+            """
+            MERGE (b:Bug {key: $key})
+            ON CREATE SET b.first_seen = $ts, b.created = $created
+            SET b.last_seen = $ts, b.summary = $summary,
+                b.priority = $priority, b.status = $status,
+                b.url = $url, b.description = $description,
+                b.all_components = $all_components,
+                b.fixed_in_release = $fixed_in_release,
+                b.fix_image = $fix_image,
+                b.fix_commits = $fix_commits
+            RETURN b.first_seen = $ts AS is_new
+            """,
+            key=bug.key, summary=bug.summary,
+            priority=bug.priority, status=bug.status,
+            created=bug.created, url=bug.url, ts=timestamp,
+            description=desc, all_components=all_comps,
+            fixed_in_release=bug.fixed_in_release,
+            fix_image=bug.fix_image,
+            fix_commits=list(bug.fix_commits) if bug.fix_commits else [],
+        )
+        record = r.single()
+        for comp_name in all_comps:
+            session.run(
+                """
+                MERGE (c:Component {name: $component})
+                MERGE (b:Bug {key: $key})
+                MERGE (c)-[:HAS_BUG]->(b)
+                """,
+                component=comp_name, key=bug.key,
+            )
+        return bool(record and record["is_new"])
+
+    def _set_filter(
+        self, session, fr: FilterResult, agent: str, domain_only: bool, *, passed: bool,
+    ) -> None:
+        if domain_only:
+            session.run(
+                """
+                MERGE (b:Bug {key: $key})
+                SET b.virt_relevant = $passed,
+                    b.skip_reason = $reason,
+                    b.last_filter_agent = $agent,
+                    b.last_filter_mode = 'domain',
+                    b.last_filter_outcome = $outcome,
+                    b.failure_mode = CASE WHEN $passed THEN $failure_mode ELSE b.failure_mode END
+                """,
+                key=fr.bug.key,
+                passed=passed,
+                reason=None if passed else fr.skip_reason,
+                agent=agent,
+                outcome="pass" if passed else "skip",
+                failure_mode=fr.failure_mode,
+            )
+        else:
+            session.run(
+                """
+                MERGE (b:Bug {key: $key})
+                SET b.chaos_relevant = $passed,
+                    b.skip_reason = $reason,
+                    b.last_filter_agent = $agent,
+                    b.last_filter_mode = 'chaos',
+                    b.last_filter_outcome = $outcome,
+                    b.failure_mode = CASE WHEN $passed THEN $failure_mode ELSE b.failure_mode END
+                """,
+                key=fr.bug.key,
+                passed=passed,
+                reason=None if passed else fr.skip_reason,
+                agent=agent,
+                outcome="pass" if passed else "skip",
+                failure_mode=fr.failure_mode,
+            )
+
+    def _upsert_gap(self, session, gap: GapAnalysis, agent: str, timestamp: str) -> bool:
+        gap_id = f"{gap.bug.key}_{agent}"
+        r = session.run(
+            """
+            MATCH (b:Bug {key: $bug_key})
+            MERGE (g:Gap {id: $gap_id})
+            ON CREATE SET g.confidence = $confidence,
+                g.confidence_level = $level,
+                g.action_type = $action_type,
+                g.reasoning = $reasoning,
+                g.base_scenario = $base_scenario,
+                g.status = 'open',
+                g.opened_at = $ts,
+                g.agent = $agent
+            SET g.confidence = $confidence,
+                g.confidence_level = $level,
+                g.action_type = $action_type,
+                g.reasoning = $reasoning,
+                g.base_scenario = $base_scenario,
+                g.agent = $agent
+            MERGE (b)-[:HAS_GAP]->(g)
+            RETURN g.opened_at = $ts AS is_new
+            """,
+            bug_key=gap.bug.key, gap_id=gap_id,
+            confidence=gap.confidence_score,
+            level=gap.confidence_level.value,
+            action_type=gap.action_type.value,
+            reasoning=gap.reasoning,
+            base_scenario=gap.base_scenario,
+            ts=timestamp, agent=agent,
+        )
+        record = r.single()
+        return bool(record and record["is_new"])
 
     # Sync alias for pipeline compatibility
     remember_result_sync = remember_result
@@ -605,4 +711,8 @@ class Neo4jStore:
 
     def close(self) -> None:
         if self._driver:
-            self._driver.close()
+            try:
+                self._driver.close()
+            except Exception as e:
+                logger.debug("Neo4j driver close error: %s", e)
+            self._driver = None
