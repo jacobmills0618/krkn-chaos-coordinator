@@ -68,19 +68,23 @@ def reset_token_usage() -> None:
 SYSTEM_PROMPT = """You are a chaos engineering expert for OpenShift/Kubernetes clusters.
 Your job is to determine if a JIRA bug describes a failure mode that can be tested with chaos engineering tools (krkn).
 
+Judge by the failure mode and whether chaos injection can reproduce it — not by how the root cause is labeled.
+If a component behaves incorrectly during, after, or because of a disruption, it is chaos-relevant even if the underlying fix is elsewhere (permissions, config, API gaps, etc.).
+Tie-break: when the reproduction injects a disruption and asserts bad post-disruption state (failed cleanup, orphans, stuck resources), classify chaos_relevant=true with high confidence; do not skip as "static config."
+
 A bug IS chaos-relevant if:
 - A component fails under stress, load, or resource pressure
 - A component fails when another component dies or becomes unavailable
-- Recovery doesn't work after a disruption (node reboot, pod kill, network partition)
+- Recovery or cleanup doesn't work after a disruption (node reboot, pod kill, network partition)
 - Race condition during upgrade or rollout
 - Data corruption or loss under failure conditions
 
 A bug is NOT chaos-relevant if:
-- It's a code logic bug (wrong output from correct inputs, nil pointer, bad parsing)
+- It's a code logic bug (wrong output from correct inputs, nil pointer, bad parsing) with no disruption involved
 - It's a CVE or security vulnerability (needs a patch, not a resilience test)
-- It's a UI/console rendering issue
+- It's a UI/console rendering issue or status-message wording
 - It's a flaky test or test infrastructure problem
-- It's a documentation or configuration error
+- It's documentation or static misconfiguration with no disruption in the failure mode or reproduction
 - It's a version-specific migration issue that can't be reproduced via chaos injection
 
 krkn can inject these failure types:
