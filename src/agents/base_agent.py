@@ -112,6 +112,9 @@ class BaseDomainAgent(ABC):
         status_done(name, "DISCOVER", f"{len(bugs)} bugs ({len(new_bugs)} new, {len(known_bugs)} known)")
         logger.info("DISCOVER: found %d bugs (%d new, %d known)", len(bugs), len(new_bugs), len(known_bugs))
 
+        for bug in new_bugs:
+            self._persist(lambda b=bug: self.neo4j.persist_bug(b))
+
         # FILTER
         filter_start = time.monotonic()
         status(name, "FILTER", f"filtering {len(new_bugs)} bugs...")
@@ -225,11 +228,37 @@ class BaseDomainAgent(ABC):
                 "Using domain-only filter (ocp-virt keywords on %s bugs, no chaos gate)",
                 self.agent_name,
             )
-            return filter_domain_bugs(bugs, agent_name=self.agent_name)
+            relevant, skipped = filter_domain_bugs(bugs, agent_name=self.agent_name)
+            self._persist_filters(relevant, skipped)
+            return relevant, skipped
         if self.use_llm:
             logger.info("Using tiered filter: keyword → cache → LLM")
             return self._tiered_filter(bugs, metrics)
-        return filter_bugs(bugs, agent_name=self.agent_name)
+        relevant, skipped = filter_bugs(bugs, agent_name=self.agent_name)
+        self._persist_filters(relevant, skipped)
+        return relevant, skipped
+
+    def _filter_mode(self) -> str:
+        return "domain" if self.domain_filter_only else "chaos"
+
+    def _persist(self, fn) -> None:
+        """Best-effort Neo4j write (reconnect/reboot if needed)."""
+        try:
+            if self.neo4j.ensure_connected(retries=3):
+                fn()
+        except Exception as e:
+            logger.warning("Incremental Neo4j write failed: %s", e)
+
+    def _persist_filters(
+        self, relevant: list[FilterResult], skipped: list[FilterResult],
+    ) -> None:
+        mode = self._filter_mode()
+        for fr in relevant + skipped:
+            self._persist(
+                lambda fr=fr: self.neo4j.persist_filter(
+                    fr, self.agent_name, filter_mode=mode,
+                )
+            )
 
     def _tiered_filter(
         self, bugs: list[Bug], metrics: RunMetrics,
@@ -248,11 +277,21 @@ class BaseDomainAgent(ABC):
                 else:
                     skipped.append(kw_result)
                 metrics.keyword_filter_hits += 1
+                self._persist(
+                    lambda fr=kw_result: self.neo4j.persist_filter(
+                        fr, self.agent_name, filter_mode=self._filter_mode(),
+                    )
+                )
                 self._slog.log_phase("filter", "success", f"{bug.key}: keyword ({kw_result.confidence:.0%})",
                                      bug_key=bug.key, cache_hit=True)
             elif kw_result.confidence < 0.2:
                 skipped.append(kw_result)
                 metrics.keyword_filter_hits += 1
+                self._persist(
+                    lambda fr=kw_result: self.neo4j.persist_filter(
+                        fr, self.agent_name, filter_mode=self._filter_mode(),
+                    )
+                )
                 self._slog.log_phase("filter", "success", f"{bug.key}: keyword skip",
                                      bug_key=bug.key, cache_hit=True)
             else:
@@ -273,6 +312,11 @@ class BaseDomainAgent(ABC):
                 else:
                     skipped.append(result)
                 metrics.semantic_cache_hits += 1
+                self._persist(
+                    lambda fr=result: self.neo4j.persist_filter(
+                        fr, self.agent_name, filter_mode=self._filter_mode(),
+                    )
+                )
                 self._slog.log_phase("filter", "success", f"{bug.key}: cache hit",
                                      bug_key=bug.key, cache_hit=True)
             else:
@@ -301,6 +345,12 @@ class BaseDomainAgent(ABC):
                 relevant.append(result)
             else:
                 skipped.append(result)
+
+            self._persist(
+                lambda fr=result: self.neo4j.persist_filter(
+                    fr, self.agent_name, filter_mode=self._filter_mode(),
+                )
+            )
 
             if self._filter_cache:
                 self._filter_cache.put(bug.summary, result)
@@ -464,18 +514,28 @@ class BaseDomainAgent(ABC):
             self._slog.log_phase("analyze", obs.status, obs.summary,
                                  bug_key=bug.key, confidence=gap.confidence_score)
             gaps.append(gap)
+            self._persist(
+                lambda g=gap: self.neo4j.persist_gap(g, self.agent_name)
+            )
 
         return gaps
 
     # ── REMEMBER ──────────────────────────────────────────────────
 
     def _remember(self, result: AgentResult) -> None:
-        self.neo4j.remember_result_sync(result)
-        logger.info("REMEMBER: stored in Neo4j")
+        try:
+            if not self.neo4j.ensure_connected():
+                raise ConnectionError("Neo4j unavailable")
+            self.neo4j.record_run(result)
+            logger.info("REMEMBER: stored in Neo4j")
+        except Exception as e:
+            logger.error("REMEMBER failed: %s", e)
 
     def _store_metrics(self, metrics: RunMetrics) -> None:
         metrics_dict = {**asdict(metrics), "agent": self.agent_name}
         try:
+            if not self.neo4j.ensure_connected():
+                raise ConnectionError("Neo4j unavailable for metrics")
             self.neo4j.store_run_metrics(metrics_dict)
             logger.info(
                 "METRICS: filter=%d kw/%d cache/%d llm, map=%d, analyze=%d, tokens=%d",

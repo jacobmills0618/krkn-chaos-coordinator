@@ -308,6 +308,7 @@ class TestProtocolCompliance:
     def test_neo4j_store_has_all_protocol_methods(self) -> None:
         required_methods = [
             "connect",
+            "ensure_connected",
             "remember_result",
             "get_analyzed_bug_keys",
             "is_bug_analyzed",
@@ -418,3 +419,96 @@ class TestNeo4jStoreEnvLoading:
 
         store = Neo4jStore(password="explicit")
         assert store._password == "explicit"
+
+
+class TestEnsureConnected:
+    def test_ok_when_verify_passes(self) -> None:
+        from unittest.mock import MagicMock
+
+        store = Neo4jStore.__new__(Neo4jStore)
+        store._driver = MagicMock()
+        assert store.ensure_connected(retries=1) is True
+        store._driver.verify_connectivity.assert_called_once()
+
+    def test_reconnects_when_stale(self) -> None:
+        from unittest.mock import MagicMock, patch
+
+        store = Neo4jStore.__new__(Neo4jStore)
+        store._driver = MagicMock()
+        store._driver.verify_connectivity.side_effect = OSError("stale")
+
+        with patch.object(store, "close") as mock_close, \
+             patch.object(store, "connect", side_effect=[False, True]) as mock_connect, \
+             patch("src.knowledge.neo4j_store.restart_neo4j_container", return_value=True) as mock_reboot, \
+             patch("src.knowledge.neo4j_store.time.sleep"):
+            assert store.ensure_connected(retries=1) is True
+            mock_close.assert_called()
+            mock_reboot.assert_called_once()
+            assert mock_connect.call_count == 2
+
+
+class TestRestartNeo4jContainer:
+    def test_uses_podman_restart(self) -> None:
+        from unittest.mock import MagicMock, patch
+        from src.knowledge.neo4j_store import restart_neo4j_container
+
+        completed = MagicMock(returncode=0, stdout="", stderr="")
+
+        def fake_run(cmd, **kwargs):
+            return completed
+
+        with patch("src.knowledge.neo4j_store._resolve_engine", return_value="/opt/podman/bin/podman"), \
+             patch("src.knowledge.neo4j_store.subprocess.run", side_effect=fake_run) as mock_run:
+            assert restart_neo4j_container("neo4j-coordinator") is True
+            calls = [c[0][0] for c in mock_run.call_args_list]
+            assert calls[0][:3] == ["/opt/podman/bin/podman", "machine", "start"]
+            assert ["/opt/podman/bin/podman", "restart", "neo4j-coordinator"] in calls
+
+    def test_finds_podman_outside_path(self) -> None:
+        from unittest.mock import patch
+        from src.knowledge.neo4j_store import _resolve_engine
+
+        with patch("src.knowledge.neo4j_store.shutil.which", return_value=None), \
+             patch("src.knowledge.neo4j_store.os.path.isfile", side_effect=lambda p: p == "/opt/podman/bin/podman"), \
+             patch("src.knowledge.neo4j_store.os.access", return_value=True):
+            assert _resolve_engine() == "/opt/podman/bin/podman"
+
+
+class TestIncrementalPersist:
+    def test_persist_filter_writes_bug_and_decision(self) -> None:
+        from unittest.mock import MagicMock
+
+        store = Neo4jStore.__new__(Neo4jStore)
+        session = MagicMock()
+        session.__enter__ = MagicMock(return_value=session)
+        session.__exit__ = MagicMock(return_value=False)
+        session.run.return_value.single.return_value = {"is_new": True}
+        store._driver = MagicMock()
+        store._driver.session.return_value = session
+
+        bug = _make_bug("OCPBUGS-9")
+        fr = FilterResult(bug=bug, chaos_relevant=True, failure_mode="crash")
+        store.persist_filter(fr, "control_plane", filter_mode="chaos")
+        assert session.run.call_count >= 2
+
+    def test_persist_gap_links_bug(self) -> None:
+        from unittest.mock import MagicMock
+
+        store = Neo4jStore.__new__(Neo4jStore)
+        session = MagicMock()
+        session.__enter__ = MagicMock(return_value=session)
+        session.__exit__ = MagicMock(return_value=False)
+        session.run.return_value.single.return_value = {"is_new": True}
+        store._driver = MagicMock()
+        store._driver.session.return_value = session
+
+        bug = _make_bug("OCPBUGS-10")
+        gap = GapAnalysis(
+            bug=bug,
+            confidence_score=50,
+            confidence_level=Confidence.MEDIUM,
+            action_type=ActionType.GITHUB_ISSUE,
+            reasoning="gap",
+        )
+        store.persist_gap(gap, "networking")
+        assert session.run.call_count >= 2
