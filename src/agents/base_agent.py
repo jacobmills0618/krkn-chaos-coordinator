@@ -6,7 +6,7 @@ import json
 import logging
 import time
 from abc import ABC
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from src.agents.registry import discover_agents
@@ -137,7 +137,10 @@ class BaseDomainAgent(ABC):
         gaps = self._analyze(unmatched, metrics)
         metrics.analyze_duration_sec = round(time.monotonic() - analyze_start, 2)
         status_done(name, "ANALYZE", f"{len(gaps)} gaps scored ({metrics.analyze_duration_sec}s)")
-        logger.info("ANALYZE: %d gaps identified", len(gaps))
+        logger.info(
+            "ANALYZE: %d gaps identified (%.2fs)",
+            len(gaps), metrics.analyze_duration_sec,
+        )
 
         metrics.bugs_succeeded = len(relevant) + len(skipped)
 
@@ -149,6 +152,7 @@ class BaseDomainAgent(ABC):
             bugs_matched=matched,
             gaps=gaps,
             filter_mode="domain" if self.domain_filter_only else "chaos",
+            analyze_duration_sec=metrics.analyze_duration_sec,
         )
 
         # REMEMBER
@@ -159,6 +163,12 @@ class BaseDomainAgent(ABC):
         metrics.total_input_tokens = usage["input_tokens"]
         metrics.total_output_tokens = usage["output_tokens"]
         self._store_metrics(metrics)
+
+        result = replace(
+            result,
+            llm_calls=usage["call_count"],
+            cost_usd=usage["cost_usd"],
+        )
 
         cost_str = f"${usage['cost_usd']:.2f}" if usage["cost_usd"] > 0 else "free"
         status_done(name, "REMEMBER", f"done — {len(gaps)} gaps, {usage['call_count']} LLM calls, {cost_str}")

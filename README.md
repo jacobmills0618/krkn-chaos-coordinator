@@ -91,6 +91,8 @@ python src/main.py --release 4.21                                    # keyword o
 ```
 Colored progress bars in terminal. Clean plain text in Claude Code. Logs → `krkn-chaos-coordinator.log`.
 
+After a scan finishes, Claude shows a **per-agent results table** plus **Gaps by confidence**. How to read it: [Interpreting scan results](docs/scan-results.md).
+
 ---
 
 ## Adding a New Agent

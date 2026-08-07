@@ -140,6 +140,9 @@ class AgentResult:
     errors: list[str] = field(default_factory=list)
     # "chaos" = full chaos/injection filter; "domain" = ocp-virt domain keywords only
     filter_mode: str = "chaos"
+    analyze_duration_sec: float = 0.0
+    llm_calls: int = 0
+    cost_usd: float = 0.0
 
 
 @dataclass(frozen=True)

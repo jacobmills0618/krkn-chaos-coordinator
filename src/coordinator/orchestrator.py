@@ -71,6 +71,9 @@ def format_summary(results: list[AgentResult]) -> str:
     total_known = 0
     total_matched = 0
     total_gaps = 0
+    total_llm_calls = 0
+    total_analyze_sec = 0.0
+    total_cost = 0.0
 
     for result in results:
         discovered = len(result.bugs_discovered)
@@ -80,6 +83,7 @@ def format_summary(results: list[AgentResult]) -> str:
         known = max(0, discovered - filtered_this_run)
         matched = len(result.bugs_matched)
         gaps = len(result.gaps)
+        cost_str = f"${result.cost_usd:.2f}" if result.cost_usd > 0 else "free"
 
         total_bugs += discovered
         total_relevant += relevant
@@ -87,6 +91,9 @@ def format_summary(results: list[AgentResult]) -> str:
         total_known += known
         total_matched += matched
         total_gaps += gaps
+        total_llm_calls += result.llm_calls
+        total_analyze_sec += result.analyze_duration_sec
+        total_cost += result.cost_usd
 
         lines.append(f"Agent: {result.agent_name}")
         lines.append(f"  Discovered: {discovered} bugs ({filtered_this_run} new filtered this run, {known} known)")
@@ -94,13 +101,18 @@ def format_summary(results: list[AgentResult]) -> str:
         lines.append(f"  Skipped:    {skipped} (this run only)")
         lines.append(f"  Matched:    {matched} (existing coverage)")
         lines.append(f"  Gaps:       {gaps}")
+        lines.append(f"  LLM calls:  {result.llm_calls}")
+        lines.append(f"  ANALYZE:    {result.analyze_duration_sec}s")
+        lines.append(f"  Cost:       {cost_str}")
         lines.append("")
 
+    total_cost_str = f"${total_cost:.2f}" if total_cost > 0 else "free"
     lines.append("-" * 40)
     lines.append(
         f"TOTAL this run: {total_bugs} discovered, {total_relevant} passed filter, "
         f"{total_skipped} skipped, {total_known} known (not re-filtered), "
-        f"{total_gaps} gaps identified"
+        f"{total_gaps} gaps, {total_llm_calls} LLM calls, "
+        f"ANALYZE {round(total_analyze_sec, 2)}s, cost={total_cost_str}"
     )
     lines.append("=" * 60)
     return "\n".join(lines)

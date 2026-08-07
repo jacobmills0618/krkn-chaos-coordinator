@@ -265,7 +265,11 @@ Present each bug as: `[CONFIDENCE%] OCPBUGS-XXXXX: summary`. Tune keywords in `c
 
 ## After the Scan: Post Gaps to GitHub
 
-If the pipeline found gaps, present each one to the user and ask which to post as GitHub issues using AskUserQuestion:
+After a full scan, present results as:
+1. **Per-agent table** — Agent | Discovered | Passed Filter | Skipped | Gaps | LLM Calls | ANALYZE | Cost (+ TOTAL). Read LLM calls / ANALYZE seconds / Cost from each agent block in `format_summary` (e.g. `LLM calls: 12`, `ANALYZE: 45.2s`). Do **not** use a Metric/Count rollup.
+2. **Gaps by confidence** table (keep when gaps > 0).
+
+Then ask which gaps to post as GitHub issues using AskUserQuestion:
 
 - Question: "Which gaps should I create as GitHub issues?"
 - multiSelect: true

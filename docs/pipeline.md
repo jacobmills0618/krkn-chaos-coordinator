@@ -142,6 +142,7 @@ Humans still approve; nothing merges itself.
 
 ## Related
 
+- [Interpreting scan results](scan-results.md)
 - [README pipeline summary](../README.md#pipeline)
 - [Project overview (visual)](project-overview.html)
 - [Agent config](../config/agents/README.md)

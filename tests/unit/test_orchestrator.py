@@ -76,11 +76,17 @@ class TestFormatSummary:
             agent_name="control_plane",
             bugs_discovered=[_make_bug()],
             gaps=[_make_gap(_make_bug(), 50)],
+            analyze_duration_sec=12.5,
+            llm_calls=7,
+            cost_usd=0.42,
         )
         output = format_summary([result])
         assert "control_plane" in output
         assert "1 discovered" in output
         assert "0 passed filter" in output
+        assert "LLM calls:  7" in output
+        assert "ANALYZE:    12.5s" in output
+        assert "Cost:       $0.42" in output
 
     def test_passed_is_not_discovered_minus_skipped(self):
         """Known bugs inflate discovered; PASS must use bugs_passed_filter only."""
